@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>DiskVisualizer</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.antigravity.diskvisualizer</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Disk Visualizer</string>
+    <key>CFBundleDisplayName</key>
+    <string>Disk Visualizer</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <!-- Privacy usage descriptions for file system access -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Disk Visualizer requires access to your Desktop folder to measure file sizes and disk usage.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Disk Visualizer requires access to your Documents folder to measure file sizes and disk usage.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Disk Visualizer requires access to your Downloads folder to measure file sizes and disk usage.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Disk Visualizer requires access to external and removable drives to measure file sizes and disk usage.</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>Disk Visualizer requires Full Disk Access to analyze all system directories accurately.</string>
+</dict>
+</plist>

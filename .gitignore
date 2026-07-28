@@ -1,0 +1,12 @@
+# Swift / Package Manager build directories
+.build/
+.freebuff/
+
+
+# macOS hidden files
+.DS_Store
+
+# AI agent / dev infrastructure
+scripts/
+docs/
+CLAUDE.md
