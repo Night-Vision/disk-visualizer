@@ -23,6 +23,11 @@ public final class NodeStore: @unchecked Sendable {
 
     public var count: Int { nodes.count }
 
+    /// Thread-safe read of a single node at `index`.
+    func read<T>(at index: Int, _ access: (CompactNode) -> T) -> T {
+        lock.withLock { access(nodes[index]) }
+    }
+
     /// Thread-safe append. Returns the index of the newly inserted node.
     @discardableResult
     func append(_ node: CompactNode) -> Int {

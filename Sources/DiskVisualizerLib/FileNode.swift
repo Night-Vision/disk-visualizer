@@ -14,33 +14,33 @@ public struct FileNode: Identifiable, Hashable, Sendable {
 
     // MARK: - Stored (redirected) properties
 
-    public var url: URL { store.nodes[index].url }
-    public var name: String { store.nodes[index].name }
-    public var isDirectory: Bool { store.nodes[index].isDirectory }
+    public var url: URL { store.read(at: index) { $0.url } }
+    public var name: String { store.read(at: index) { $0.name } }
+    public var isDirectory: Bool { store.read(at: index) { $0.isDirectory } }
 
     public var parent: FileNode? {
-        let p = store.nodes[index].parentIndex
+        let p = store.read(at: index) { $0.parentIndex }
         guard p >= 0 else { return nil }
         return FileNode(store: store, index: p)
     }
 
     public var children: [FileNode] {
-        get { store.nodes[index].childIndices.map { FileNode(store: store, index: $0) } }
+        get { store.read(at: index) { $0.childIndices }.map { FileNode(store: store, index: $0) } }
         set { store.setChildren(newValue.map { $0.index }, for: index) }
     }
 
     public var size: Int64 {
-        get { store.nodes[index].size }
+        get { store.read(at: index) { $0.size } }
         set { store.setSize(newValue, for: index) }
     }
 
     public var isScanned: Bool {
-        get { store.nodes[index].isScanned }
+        get { store.read(at: index) { $0.isScanned } }
         set { store.setScanned(newValue, for: index) }
     }
 
     public var modificationDate: Date? {
-        get { store.nodes[index].modificationDate }
+        get { store.read(at: index) { $0.modificationDate } }
         set { store.setModificationDate(newValue, for: index) }
     }
 

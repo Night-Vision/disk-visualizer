@@ -340,23 +340,8 @@ private struct SunburstCanvas: View {
     private func drawSegment(_ segment: SunburstSegment, root: FileNode, center: CGPoint, ringWidth: CGFloat, in context: inout GraphicsContext) {
         let path = wedgePath(segment: segment, center: center, ringWidth: ringWidth)
         let isHovered = hoveredNode.map { $0 == segment.node } ?? false
-        let category = NodeCategory.categorize(segment.node.url)
 
-        let color: Color
-        switch category {
-        case .regular:
-            color = Color.paletteColor(for: segment.node, root: root)
-        case .system:
-            // Off-white with a faint cool tint: reads as "neutral operator zone"
-            // without burning the retina on Pro Motion. Uses a single solid fill
-            // — no hatching — per the user's request to drop the stripes.
-            color = Color(red: 0.92, green: 0.93, blue: 0.95)
-        case .cache:
-            // Soft amber that stays readable on the dark canvas. Lighter and
-            // less saturated than full hazard yellow so a row of cache wedges
-            // doesn't strobe; still distinct from the muted regular palette.
-            color = Color(red: 0.95, green: 0.78, blue: 0.30)
-        }
+        let color = Color.paletteColor(for: segment.node, root: root)
         context.fill(path, with: .color(color))
 
         // Petal-like stroke gap.
