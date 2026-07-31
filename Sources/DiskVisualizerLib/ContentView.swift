@@ -20,6 +20,7 @@ public struct ContentView: View {
     /// Used to key the sunburst transition so the opening animation does not
     /// run on breadcrumb navigation, scan completion, or trash updates.
     @State private var drillDownID: UUID?
+    @State private var colorSchemeMode: ColorSchemeMode = .named
 
     private var displayedRoot: FileNode? {
         currentRoot ?? scanner.rootNode
@@ -32,6 +33,7 @@ public struct ContentView: View {
             sidebar
         } detail: {
             detailView
+                .environment(\.colorSchemeMode, colorSchemeMode)
         }
     }
 
@@ -60,6 +62,11 @@ public struct ContentView: View {
                         }
                     }
                     .disabled(scanner.isScanning || scanner.rootNode == nil && selectedVolume == nil)
+
+                    Button("Palette") {
+                        colorSchemeMode = colorSchemeMode == .named ? .fileType : .named
+                    }
+                    .disabled(scanner.isScanning)
                 }
             }
             .listStyle(.sidebar)

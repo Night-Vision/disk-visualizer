@@ -71,6 +71,7 @@ private struct SunburstCanvas: View {
 
     @Environment(\.displayScale) private var screenScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeMode) private var colorScheme
 
     // Bounds.
     private let minScale: CGFloat = 1.0
@@ -341,7 +342,7 @@ private struct SunburstCanvas: View {
         let path = wedgePath(segment: segment, center: center, ringWidth: ringWidth)
         let isHovered = hoveredNode.map { $0 == segment.node } ?? false
 
-        let color = Color.paletteColor(for: segment.node, root: root)
+        let color = Color.paletteColor(for: segment.node, root: root, scheme: colorScheme)
         context.fill(path, with: .color(color))
 
         // Petal-like stroke gap.

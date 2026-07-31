@@ -6,6 +6,8 @@ struct DetailPanel: View {
     var onDelete: (FileNode) -> Void = { _ in }
     var onSelect: (FileNode) -> Void = { _ in }
 
+    @Environment(\.colorSchemeMode) private var colorScheme
+
     private var displayed: FileNode {
         selected ?? root
     }
@@ -36,7 +38,7 @@ struct DetailPanel: View {
             List(sortedChildren) { child in
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.paletteColor(for: child, root: root))
+                        .fill(Color.paletteColor(for: child, root: root, scheme: colorScheme))
                         .frame(width: 12, height: 12)
 
                     Text(child.name)
