@@ -162,7 +162,10 @@ public final class DiskScanner {
         for skipRoot in skipRootPaths {
             if path == skipRoot || path.hasPrefix(skipRoot + "/") { return true }
         }
-        if skipRootHiddenPrefixes.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) {
+        // System hidden dirs (.Spotlight-V100, .fseventsd, …) can sit at the
+        // root of any volume. Match by last path component — absolute prefix
+        // matching would only catch them at the boot-volume root.
+        if skipRootHiddenPrefixes.contains(url.lastPathComponent) {
             return true
         }
         return false
