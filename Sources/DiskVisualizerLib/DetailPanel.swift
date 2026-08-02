@@ -12,10 +12,6 @@ struct DetailPanel: View {
         selected ?? root
     }
 
-    private var sortedChildren: [FileNode] {
-        root.children.sorted { $0.size > $1.size }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -35,7 +31,7 @@ struct DetailPanel: View {
 
             Divider()
 
-            List(sortedChildren) { child in
+            List(root.children) { child in
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.paletteColor(for: child, root: root, scheme: colorScheme))

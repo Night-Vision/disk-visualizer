@@ -120,6 +120,10 @@ public final class NodeStore: @unchecked Sendable {
     /// Remove the node at `index` from its parent's child list and subtract
     /// its size from all ancestors. Idempotent: after the first call `size` is
     /// zeroed so subsequent calls are no-ops. Thread-safe.
+    ///
+    /// Also maintains the size-descending order of `childIndices` established
+    /// at scan time: each node whose size shrank may now be out of order among
+    /// its siblings, so every ancestor's parent's child list is re-sorted.
     func removeFromTree(_ index: Int) {
         lock.withLock {
             let pi = nodes[index].parentIndex
@@ -131,7 +135,13 @@ public final class NodeStore: @unchecked Sendable {
             var current = pi
             while current >= 0 {
                 nodes[current].size -= removedSize
-                current = nodes[current].parentIndex
+                // This node's size changed, so it may be out of order among its
+                // own parent's children. Restore the size-descending invariant.
+                let parent = nodes[current].parentIndex
+                if parent >= 0 {
+                    nodes[parent].childIndices.sort { nodes[$0].size > nodes[$1].size }
+                }
+                current = parent
             }
         }
     }
