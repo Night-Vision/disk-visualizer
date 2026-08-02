@@ -55,6 +55,10 @@
   - The Finder / Trash / Terminal buttons in the sidebar inspector card dropped their text labels (`Fin…`, `Tra…`, `Ter…`) which were being truncated by sidebar width. The three icons (`folder`, `trash`, `terminal`) remain, with hover tooltips and VoiceOver labels intact.
 
 ### ⚡ Performance
+- **Hard-link dedup without a second stat syscall**
+  - `InodeTracker` now keys on `fileResourceIdentifier` / `volumeIdentifier`, which arrive with the same bulk resource fetch the scanner already performs. The previous per-file `attributesOfItem(atPath:)` for every file with `linkCount > 1` is gone, so link-heavy trees (`/System`, Xcode toolchains) no longer stall the 16 concurrent scan tasks on blocking stats.
+- **Deep-subtree size aggregation is now parallel**
+  - `aggregateDeepSize` at depth ≥ 8 used to walk remaining subdirectories sequentially. It now batches them 16 at a time through `withThrowingTaskGroup` (per-directory walk in `aggregateOneSubdir`), matching the parallel subdirectory scan; cancellation still propagates.
 - **Faster full-drive scans**
   - Eliminated per-item `Set` allocation in the hot enumeration loop by pre-computing the resource-key set once.
   - Short-circuited package detection to avoid unnecessary string operations.
@@ -74,6 +78,8 @@
   - Same loop now honors `Self.shouldSkip(_:)` so it doesn't follow the firmlink into the APFS data volume at `/System/Volumes/Data` (`skipRootPaths`) — saving an extra full pass over that volume per shallow-scan root.
 
 ### 🐛 Fixes
+- **Hidden system directories are skipped again**
+  - The `skipRootHiddenPrefixes` check (`.Spotlight-V100`, `.fseventsd`, `.DocumentRevisions-V100`, `.vol`) compared absolute paths against relative names, so it never matched. It now matches `url.lastPathComponent`, catching these directories at the root of any volume, not just the boot volume.
 - **Duplicate counting on full-disk scans**
   - Added skip rules for `/System/Volumes`, `/Volumes`, `/home`, `/net`, `/Network`, and hidden root prefixes so APFS firmlinks and automounts are no longer double-counted.
 - **Loading indicator now appears immediately**
