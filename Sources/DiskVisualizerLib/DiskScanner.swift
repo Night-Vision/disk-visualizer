@@ -102,6 +102,10 @@ public final class DiskScanner {
                 try? saveCache(for: url)
 
                 await MainActor.run {
+                    // Same hop that flips `isScanning` — the flag write
+                    // happens-before every subsequent (MainActor) read, so
+                    // `NodeStore.read` can go lock-free from here on.
+                    self.store.markScanComplete()
                     self.requiresFullDiskAccess = needsFDA
                     self.isScanning = false
                     self.isCancelling = false
@@ -262,7 +266,7 @@ public final class DiskScanner {
                     // Hard links to the same inode share `fileResourceIdentifier`
                     // (unique within a volume). Both identifiers come from the
                     // resourceValues already fetched — no extra stat syscall.
-                    let isFirst = await tracker.mark(
+                    let isFirst = tracker.mark(
                         file: resourceValues?.fileResourceIdentifier,
                         volume: resourceValues?.volumeIdentifier
                     )

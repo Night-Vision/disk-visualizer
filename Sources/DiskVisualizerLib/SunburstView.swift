@@ -48,6 +48,10 @@ private struct SunburstCanvas: View {
     let geometry: GeometryProxy
 
     @State private var segments: [SunburstSegment] = []
+    /// Segments grouped by depth ring. Within each ring they're sorted by
+    /// `startAngle` (contiguous, non-overlapping partition of 2π), so the
+    /// hover hit-test can binary-search instead of scanning all segments.
+    @State private var segmentsByDepth: [[SunburstSegment]] = []
     @State private var lastTappedNode: FileNode?
 
     // Camera state for zoom/pan.
@@ -250,6 +254,10 @@ private struct SunburstCanvas: View {
 
     private func rebuildSegments() {
         segments = SunburstLayout.segments(root: root)
+        // Appending in flat-array order preserves each ring's angle sort.
+        var byDepth = Array(repeating: [SunburstSegment](), count: SunburstLayout.maxDepth + 1)
+        for segment in segments { byDepth[segment.depth].append(segment) }
+        segmentsByDepth = byDepth
     }
 
     // MARK: - Scroll wheel support
@@ -422,10 +430,17 @@ private struct SunburstCanvas: View {
         let depth = Int((distance - SunburstLayout.centerHoleRadius) / ringWidth) + 1
         if depth < 1 || depth > SunburstLayout.maxDepth { return nil }
 
-        let segs = segments
-        return segs.first { segment in
-            segment.depth == depth && angle >= segment.startAngle && angle <= segment.endAngle
-        }?.node
+        guard depth < segmentsByDepth.count else { return nil }
+        let ring = segmentsByDepth[depth]
+        // A ring partitions 2π contiguously (segments sorted by startAngle), so
+        // "first segment whose endAngle >= angle" equals `first { start <= angle <= end }`.
+        var lo = 0, hi = ring.count - 1
+        while lo <= hi {
+            let mid = (lo + hi) / 2
+            if ring[mid].endAngle < angle { lo = mid + 1 } else { hi = mid - 1 }
+        }
+        guard ring.indices.contains(lo) else { return nil }
+        return ring[lo].node
     }
 }
 

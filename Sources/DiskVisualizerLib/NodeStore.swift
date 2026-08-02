@@ -20,12 +20,27 @@ public struct CompactNode: Codable {
 public final class NodeStore: @unchecked Sendable {
     public internal(set) var nodes: [CompactNode] = []
     private let lock = NSLock()
+    /// Set on the MainActor once the scan task has finished writing. After
+    /// this, all readers are MainActor and the flag write (inside the same
+    /// `MainActor.run` hop that flips `isScanning`) orders every scan write
+    /// before any later read, so `read` can skip the lock.
+    private var scanCompleted = false
 
     public var count: Int { nodes.count }
 
-    /// Thread-safe read of a single node at `index`.
+    /// Thread-safe read of a single node at `index`. Locks only while the
+    /// parallel scan is still writing (the breadcrumb header reads the root
+    /// chain concurrently during the scan window); lock-free once complete.
     func read<T>(at index: Int, _ access: (CompactNode) -> T) -> T {
-        lock.withLock { access(nodes[index]) }
+        if scanCompleted { return access(nodes[index]) }
+        return lock.withLock { access(nodes[index]) }
+    }
+
+    /// Mark the store as fully written. Must be called from the MainActor
+    /// after the scan task's last write, so the flag write orders all scan
+    /// writes-before any later read.
+    func markScanComplete() {
+        scanCompleted = true
     }
 
     /// Thread-safe append. Returns the index of the newly inserted node.
@@ -178,9 +193,6 @@ public final class NodeStore: @unchecked Sendable {
 
     func formattedModificationDate(of index: Int) -> String {
         guard let date = nodes[index].modificationDate else { return "—" }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
