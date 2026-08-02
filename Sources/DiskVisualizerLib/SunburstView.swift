@@ -52,6 +52,9 @@ private struct SunburstCanvas: View {
     /// `startAngle` (contiguous, non-overlapping partition of 2π), so the
     /// hover hit-test can binary-search instead of scanning all segments.
     @State private var segmentsByDepth: [[SunburstSegment]] = []
+    /// Display colors, parallel to `segments`, computed once per rebuild.
+    /// Removes the per-frame `paletteColor` NSColor round-trip from `draw()`.
+    @State private var segmentColors: [Color] = []
     @State private var lastTappedNode: FileNode?
 
     // Camera state for zoom/pan.
@@ -170,6 +173,7 @@ private struct SunburstCanvas: View {
                 }
             }
         }
+        .onChange(of: colorScheme) { _, _ in rebuildSegments() }
         .gesture(
             SpatialTapGesture()
                 .onEnded { value in
@@ -258,6 +262,11 @@ private struct SunburstCanvas: View {
         var byDepth = Array(repeating: [SunburstSegment](), count: SunburstLayout.maxDepth + 1)
         for segment in segments { byDepth[segment.depth].append(segment) }
         segmentsByDepth = byDepth
+        // Colors are a pure function of (node, root, scheme) and change only
+        // on rebuild or scheme toggle — never per frame.
+        segmentColors = segments.map {
+            Color.paletteColor(for: $0.node, root: root, scheme: colorScheme)
+        }
     }
 
     // MARK: - Scroll wheel support
@@ -337,8 +346,8 @@ private struct SunburstCanvas: View {
         context.stroke(centerPath, with: .color(.white.opacity(0.3)), lineWidth: 1)
 
         // Wedges.
-        for segment in segments {
-            drawSegment(segment, root: root, center: center, ringWidth: ringWidth, in: &context)
+        for (segment, color) in zip(segments, segmentColors) {
+            drawSegment(segment, color: color, center: center, ringWidth: ringWidth, in: &context)
         }
 
         // Root label.
@@ -346,11 +355,10 @@ private struct SunburstCanvas: View {
         context.draw(rootText, at: center, anchor: .center)
     }
 
-    private func drawSegment(_ segment: SunburstSegment, root: FileNode, center: CGPoint, ringWidth: CGFloat, in context: inout GraphicsContext) {
+    private func drawSegment(_ segment: SunburstSegment, color: Color, center: CGPoint, ringWidth: CGFloat, in context: inout GraphicsContext) {
         let path = wedgePath(segment: segment, center: center, ringWidth: ringWidth)
         let isHovered = hoveredNode.map { $0 == segment.node } ?? false
 
-        let color = Color.paletteColor(for: segment.node, root: root, scheme: colorScheme)
         context.fill(path, with: .color(color))
 
         // Petal-like stroke gap.
