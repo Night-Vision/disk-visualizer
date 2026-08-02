@@ -24,9 +24,9 @@ final class DiskVisualizerTests: XCTestCase {
 
     func testInodeTrackerMarksFirstOnly() async {
         let tracker = InodeTracker()
-        let first = await tracker.mark(inode: 123, device: 1)
-        let second = await tracker.mark(inode: 123, device: 1)
-        let different = await tracker.mark(inode: 124, device: 1)
+        let first = await tracker.mark(file: NSNumber(value: 123), volume: NSNumber(value: 1))
+        let second = await tracker.mark(file: NSNumber(value: 123), volume: NSNumber(value: 1))
+        let different = await tracker.mark(file: NSNumber(value: 124), volume: NSNumber(value: 1))
 
         XCTAssertTrue(first)
         XCTAssertFalse(second)

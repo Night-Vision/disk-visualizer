@@ -135,7 +135,9 @@ public final class DiskScanner {
         .fileSizeKey,
         .fileAllocatedSizeKey,
         .linkCountKey,
-        .contentModificationDateKey
+        .contentModificationDateKey,
+        .fileResourceIdentifierKey,
+        .volumeIdentifierKey
     ]
 
     private static let resourceKeysSet = Set(resourceKeys)
@@ -257,12 +259,14 @@ public final class DiskScanner {
 
                 var effectiveSize = fileSize
                 if linkCount > 1 {
-                    let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-                    if let inode = (attrs?[.systemFileNumber] as? NSNumber)?.uint64Value,
-                       let device = (attrs?[.systemNumber] as? NSNumber)?.uint64Value {
-                        let isFirst = await tracker.mark(inode: inode, device: device)
-                        effectiveSize = isFirst ? fileSize : 0
-                    }
+                    // Hard links to the same inode share `fileResourceIdentifier`
+                    // (unique within a volume). Both identifiers come from the
+                    // resourceValues already fetched — no extra stat syscall.
+                    let isFirst = await tracker.mark(
+                        file: resourceValues?.fileResourceIdentifier,
+                        volume: resourceValues?.volumeIdentifier
+                    )
+                    effectiveSize = isFirst ? fileSize : 0
                 }
 
                 localBytes += effectiveSize
@@ -360,57 +364,90 @@ public final class DiskScanner {
         progress: ScanProgress
     ) async throws -> Int64 {
         var total: Int64 = 0
-        for dirURL in subdirs {
+        for i in stride(from: 0, to: subdirs.count, by: maxConcurrentScans) {
             try Task.checkCancellation()
-            if !hasFDA, Self.isProtectedDirectory(dirURL) { continue }
+            let end = min(i + maxConcurrentScans, subdirs.count)
+            let batch = Array(subdirs[i..<end])
 
-            let enumerator = FileManager.default.enumerator(
-                at: dirURL,
-                includingPropertiesForKeys: resourceKeys,
-                options: [.skipsPackageDescendants],
-                errorHandler: { _, error in
-                    if Self.isPermissionError(error) {
-                        Task { await permissionCounter.increment() }
+            let batchTotal = try await withThrowingTaskGroup(of: Int64.self) { group in
+                for dirURL in batch {
+                    group.addTask {
+                        try await Self.aggregateOneSubdir(
+                            dirURL: dirURL,
+                            hasFDA: hasFDA,
+                            permissionCounter: permissionCounter,
+                            progress: progress
+                        )
                     }
-                    return true
-                }
-            )
-
-            var localBytes: Int64 = 0
-            var localItems: Int = 0
-            var localFlushCounter = 0
-
-            while let url = enumerator?.nextObject() as? URL {
-                let values = try? url.resourceValues(forKeys: Self.resourceKeysSet)
-                let isSymbolicLink = values?.isSymbolicLink ?? false
-                let isDir = values?.isDirectory ?? false
-                let isPackage = (values?.isPackage ?? false) || Self.isPackageURL(url)
-                if isSymbolicLink { continue }
-                if isDir && !isPackage { continue }
-                if Self.shouldSkip(url) { continue }
-
-                let size = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
-                localBytes += size
-                localItems += 1
-                localFlushCounter += 1
-                total += size
-
-                if localFlushCounter % 256 == 0 {
-                    try Task.checkCancellation()
-                    await Task.yield()
                 }
 
-                if localFlushCounter >= 1024 {
-                    await progress.add(bytes: localBytes, items: localItems)
-                    localBytes = 0
-                    localItems = 0
-                    localFlushCounter = 0
+                var sum: Int64 = 0
+                for try await result in group {
+                    sum += result
                 }
+                return sum
+            }
+            total += batchTotal
+        }
+        return total
+    }
+
+    /// Sums the size of every file under `dirURL` without building nodes.
+    private static func aggregateOneSubdir(
+        dirURL: URL,
+        hasFDA: Bool,
+        permissionCounter: PermissionErrorCounter,
+        progress: ScanProgress
+    ) async throws -> Int64 {
+        if !hasFDA, Self.isProtectedDirectory(dirURL) { return 0 }
+
+        let enumerator = FileManager.default.enumerator(
+            at: dirURL,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsPackageDescendants],
+            errorHandler: { _, error in
+                if Self.isPermissionError(error) {
+                    Task { await permissionCounter.increment() }
+                }
+                return true
+            }
+        )
+
+        var total: Int64 = 0
+        var localBytes: Int64 = 0
+        var localItems: Int = 0
+        var localFlushCounter = 0
+
+        while let url = enumerator?.nextObject() as? URL {
+            let values = try? url.resourceValues(forKeys: Self.resourceKeysSet)
+            let isSymbolicLink = values?.isSymbolicLink ?? false
+            let isDir = values?.isDirectory ?? false
+            let isPackage = (values?.isPackage ?? false) || Self.isPackageURL(url)
+            if isSymbolicLink { continue }
+            if isDir && !isPackage { continue }
+            if Self.shouldSkip(url) { continue }
+
+            let size = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+            total += size
+            localBytes += size
+            localItems += 1
+            localFlushCounter += 1
+
+            if localFlushCounter % 256 == 0 {
+                try Task.checkCancellation()
+                await Task.yield()
             }
 
-            if localBytes > 0 || localItems > 0 {
+            if localFlushCounter >= 1024 {
                 await progress.add(bytes: localBytes, items: localItems)
+                localBytes = 0
+                localItems = 0
+                localFlushCounter = 0
             }
+        }
+
+        if localBytes > 0 || localItems > 0 {
+            await progress.add(bytes: localBytes, items: localItems)
         }
         return total
     }
