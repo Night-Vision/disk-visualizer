@@ -63,9 +63,12 @@ public struct ContentView: View {
                     }
                     .disabled(scanner.isScanning || scanner.rootNode == nil && selectedVolume == nil)
 
-                    Button("Palette") {
-                        colorSchemeMode = colorSchemeMode == .named ? .fileType : .named
+                    Picker("Palette", selection: $colorSchemeMode) {
+                        ForEach(ColorSchemeMode.allCases, id: \.self) { mode in
+                            Text(mode.label)
+                        }
                     }
+                    .pickerStyle(.menu)
                     .disabled(scanner.isScanning)
                 }
             }
