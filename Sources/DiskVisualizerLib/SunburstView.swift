@@ -140,7 +140,8 @@ private struct SunburstCanvas: View {
         .onChange(of: geometry.size) { _, newSize in
             let maxRadius = min(newSize.width, newSize.height) / 2 - 20
             cachedRingWidth = max(12, (maxRadius - SunburstLayout.centerHoleRadius) / CGFloat(SunburstLayout.maxDepth))
-            rebuildSegments()
+            // Segments and colors are size-independent (angles derive from byte
+            // sizes, colors from node/root/scheme) — only the ring width changes.
         }
         .onChange(of: root) { _, _ in
             // Reset camera on any root change (drill-down, breadcrumb, or
