@@ -139,7 +139,13 @@ public final class NodeStore: @unchecked Sendable {
                 // own parent's children. Restore the size-descending invariant.
                 let parent = nodes[current].parentIndex
                 if parent >= 0 {
-                    nodes[parent].childIndices.sort { nodes[$0].size > nodes[$1].size }
+                    // Sort a local copy, not the stored array: an in-place sort
+                    // of `nodes[parent].childIndices` while the predicate reads
+                    // `nodes[$0]` trips Swift's exclusivity checker (same array
+                    // storage, unproven-disjoint indices) and aborts.
+                    var children = nodes[parent].childIndices
+                    children.sort { nodes[$0].size > nodes[$1].size }
+                    nodes[parent].childIndices = children
                 }
                 current = parent
             }
