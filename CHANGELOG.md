@@ -54,6 +54,9 @@
 - **Inspector action buttons are now icon-only**
   - The Finder / Trash / Terminal buttons in the sidebar inspector card dropped their text labels (`Fin…`, `Tra…`, `Ter…`) which were being truncated by sidebar width. The three icons (`folder`, `trash`, `terminal`) remain, with hover tooltips and VoiceOver labels intact.
 
+- **Breadcrumb path buttons are now native `.bordered`**
+  - The path at the top of the app renders as native bordered buttons (Liquid Glass on macOS 26) so they read as clickable, with the current location grayed out and disabled as a "you are here" cue.
+
 ### ⚡ Performance
 - **FileNode is now a 16-byte struct over a flat array**
   - `FileNode` was a heap-allocated class (~200+ bytes each: UUID, URL, name, children array, class header). It's now a struct wrapping a `(NodeStore, Int)` index pair, with all node data in a single contiguous `[CompactNode]`. Full-disk scans with tens of thousands of nodes save tens of MB and drop per-node allocation churn.
@@ -91,9 +94,13 @@
   - The shallow-scan aggregate walker (`aggregateDeepSize`) used to have only `try Task.checkCancellation()` in its per-256-item gate — no `Task.yield()`. `await progress.add(...)` is an actor call, and Swift fast-paths uncontended actors through the current thread without actually suspending, so the cooperative-thread slice was held for multi-second windows when walking shallow-scan monoliths (`/private`, `/Library`, `/System`, `/opt`, `/dev`), starving the MainActor and freezing the spinner. Added `await Task.yield()` immediately after the cancellation check.
   - Same loop now honors `Self.shouldSkip(_:)` so it doesn't follow the firmlink into the APFS data volume at `/System/Volumes/Data` (`skipRootPaths`) — saving an extra full pass over that volume per shallow-scan root.
 
+- **Cached scans actually load instead of re-walking**
+  - The on-disk cache was write-only: saved after every scan but never read back, so every launch did a full filesystem walk. `DiskScanner.scan` now loads the saved JSON off-main before walking (`ScanCache.load`); a hit skips the walk entirely. A miss, corrupt file, or old-format cache falls through to a full scan and is re-saved (self-healing). Rescan (`ignoreCache: true`) forces the walk.
+
 ### 🐛 Fixes
 - **Detail list stays sorted after trashing files**
   - Trashing a node shrank its siblings but left them in a stale order, which the detail panel's per-render sort had been masking. `removeFromTree` now restores the size-descending `childIndices` order at the mutation boundary, and the detail panel trusts the store's order.
+  - The invariant is now structural: `setChildren` sorts at the store's write boundary, so every caller (the scanner, tests, any future mutation) gets size-descending order without remembering to sort.
 - **Hidden system directories are skipped again**
   - The `skipRootHiddenPrefixes` check (`.Spotlight-V100`, `.fseventsd`, `.DocumentRevisions-V100`, `.vol`) compared absolute paths against relative names, so it never matched. It now matches `url.lastPathComponent`, catching these directories at the root of any volume, not just the boot volume.
 - **Duplicate counting on full-disk scans**
@@ -104,6 +111,11 @@
 - **Drive rows now scan via the selection binding**
   - Selecting a drive in the sidebar reliably starts a scan, including keyboard arrow navigation and programmatic selection.
   - Replaces a broken-on-macOS pattern where `List(selection:)` would swallow row clicks before the per-row `.onTapGesture` fired, leaving the drive row looking unresponsive.
+
+- **App no longer crashes when trashing a folder**
+  - `removeFromTree` sorted `nodes[parent].childIndices` in place while the sort predicate read the same array, tripping Swift's exclusivity checker (runtime abort — "simultaneous accesses"). It now sorts a local copy and writes it back.
+- **Detail panel no longer shows a stale node after trashing**
+  - Trashing the hovered node (or an ancestor of it) left `hoveredNode` pointing at a now-zeroed/orphaned node, so the right panel kept showing it until the next hover. `trash()` now clears `hoveredNode` with the same ancestor guard it already applied to `selectedNode`.
 
 ### 📚 Documentation
 - Added `CLAUDE.md`, a comprehensive AI-agent reference covering architecture, file-by-file reference, data flow, common gotchas, and a Mermaid diagram.

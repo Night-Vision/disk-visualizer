@@ -12,6 +12,10 @@ final class DiskVisualizerTests: XCTestCase {
         root.children = [a, b]
         root.size = 400
 
+        // Size-descending order is enforced at the store write boundary:
+        // b (300) must come before a (100) despite insertion order.
+        XCTAssertEqual(store.nodes[0].childIndices[0], b.index)
+
         let segments = SunburstLayout.segments(root: root)
 
         // Two child segments, each taking its proportional slice.

@@ -333,7 +333,7 @@ public final class DiskScanner {
                 directChildren.append(deepNode)
             }
 
-            directChildren.sort { $0.size > $1.size }
+            // No explicit sort needed: `setChildren` enforces size-descending order.
             node.children = directChildren
             node.size = directChildren.reduce(0) { $0 + $1.size }
             node.isScanned = true
@@ -353,6 +353,9 @@ public final class DiskScanner {
         try Task.checkCancellation()
 
         var allChildren = directChildren + scannedSubdirs
+        // Must sort before truncation: `[other folders]` below keeps the largest
+        // maxChildrenPerNode, so this pre-sort feeds prefix(50), not just display
+        // order. `setChildren` would re-sort anyway, but this one is load-bearing.
         allChildren.sort { $0.size > $1.size }
 
         if allChildren.count > maxChildrenPerNode {

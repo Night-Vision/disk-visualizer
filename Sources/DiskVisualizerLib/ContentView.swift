@@ -335,12 +335,18 @@ public struct ContentView: View {
             if currentRoot == node {
                 currentRoot = node.parent
             }
-            // Clear the inspector selection when trashing it OR any ancestor of it:
-            // the right DetailPanel's Trash button / Delete key fires against
-            // hoveredNode (not selectedNode), so a sibling/ancestor trash can
-            // leave the inspector showing a now-unreachable leaf.
+            // Clear the inspector selection when trashing it OR any ancestor of it,
+            // so a sibling/ancestor trash can't leave the inspector showing a
+            // now-unreachable leaf.
             if let sel = selectedNode, sel == node || isAncestor(node, of: sel) {
                 selectedNode = nil
+            }
+            // The right DetailPanel is bound to hoveredNode, not selectedNode, so
+            // it needs the same guard — otherwise trashing the hovered node (or an
+            // ancestor of it) leaves the panel showing the zeroed/orphaned node
+            // until the next hover event.
+            if let hov = hoveredNode, hov == node || isAncestor(node, of: hov) {
+                hoveredNode = nil
             }
             node.removeFromTree()
             // Defer the segment-rebuild trigger so SwiftUI can batch multiple

@@ -153,8 +153,17 @@ public final class NodeStore: @unchecked Sendable {
     }
 
     /// Set the child list for the node at `index`. Thread-safe.
+    ///
+    /// Sorts size-descending so the ordering invariant holds for every caller —
+    /// the scanner, tests, and any future mutation path — without each call site
+    /// remembering to sort. `removeFromTree` re-sorts inline instead (it already
+    /// holds the lock; this method would deadlock on the non-recursive NSLock).
     func setChildren(_ children: [Int], for index: Int) {
-        lock.withLock { nodes[index].childIndices = children }
+        lock.withLock {
+            var sorted = children
+            sorted.sort { nodes[$0].size > nodes[$1].size }
+            nodes[index].childIndices = sorted
+        }
     }
 
     /// Set the size for the node at `index`. Thread-safe.
