@@ -72,6 +72,20 @@ public final class DiskScanner {
         scanTask = Task {
             await Task.yield()
 
+            // Cache hit: load the saved tree off-main and skip the walk. A
+            // miss (or corrupt/missing file) falls through to the full scan.
+            // `ignoreCache` (Rescan) forces the walk regardless.
+            if !ignoreCache, let cached = ScanCache.load(for: url) {
+                cached.markScanComplete()
+                await MainActor.run {
+                    self.store = cached
+                    self.rootIndex = 0
+                    self.isScanning = false
+                    self.isCancelling = false
+                }
+                return
+            }
+
             do {
                 let root = FileNode(url: url, isDirectory: true, store: store)
                 rootIndex = root.index
