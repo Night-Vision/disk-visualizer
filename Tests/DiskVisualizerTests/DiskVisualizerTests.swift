@@ -4,10 +4,10 @@ import XCTest
 final class DiskVisualizerTests: XCTestCase {
     func testSunburstSegments() {
         let store = NodeStore()
-        let root = FileNode(url: URL(fileURLWithPath: "/tmp"), isDirectory: true, store: store)
-        let a = FileNode(url: URL(fileURLWithPath: "/tmp/a"), isDirectory: false, parent: root, store: store)
+        var root = FileNode(url: URL(fileURLWithPath: "/tmp"), isDirectory: true, store: store)
+        var a = FileNode(url: URL(fileURLWithPath: "/tmp/a"), isDirectory: false, parent: root, store: store)
         a.size = 100
-        let b = FileNode(url: URL(fileURLWithPath: "/tmp/b"), isDirectory: false, parent: root, store: store)
+        var b = FileNode(url: URL(fileURLWithPath: "/tmp/b"), isDirectory: false, parent: root, store: store)
         b.size = 300
         root.children = [a, b]
         root.size = 400
@@ -26,6 +26,41 @@ final class DiskVisualizerTests: XCTestCase {
         XCTAssertEqual(second.endAngle - second.startAngle, .pi * 1.5, accuracy: 0.001)
     }
 
+    func testRemoveFromTreeReSortsAncestors() {
+        let store = NodeStore()
+        var root = FileNode(url: URL(fileURLWithPath: "/tmp/r"), isDirectory: true, store: store)
+        var a = FileNode(url: URL(fileURLWithPath: "/tmp/r/a"), isDirectory: true, parent: root, store: store)
+        a.size = 100
+        var d = FileNode(url: URL(fileURLWithPath: "/tmp/r/d"), isDirectory: true, parent: root, store: store)
+        d.size = 70
+        var b = FileNode(url: URL(fileURLWithPath: "/tmp/r/a/b"), isDirectory: true, parent: a, store: store)
+        b.size = 60
+        var e = FileNode(url: URL(fileURLWithPath: "/tmp/r/a/e"), isDirectory: true, parent: a, store: store)
+        e.size = 40
+        var c = FileNode(url: URL(fileURLWithPath: "/tmp/r/a/b/c"), isDirectory: false, parent: b, store: store)
+        c.size = 40
+
+        root.children = [a, d]
+        a.children = [b, e]
+        b.children = [c]
+        root.size = 170
+
+        c.removeFromTree()
+
+        // C zeroed and removed from B; sizes subtracted up the chain.
+        XCTAssertEqual(store.nodes[c.index].size, 0)
+        XCTAssertEqual(store.nodes[b.index].childIndices, [])
+        XCTAssertEqual(store.nodes[b.index].size, 20)
+        XCTAssertEqual(store.nodes[a.index].size, 60)
+        XCTAssertEqual(store.nodes[root.index].size, 130)
+        // Multi-level re-sort: E(40) before B(20), D(70) before A(60).
+        XCTAssertEqual(store.nodes[a.index].childIndices, [e.index, b.index])
+        XCTAssertEqual(store.nodes[root.index].childIndices, [d.index, a.index])
+        // Idempotent: trashing the (now-zeroed) node again is a no-op.
+        c.removeFromTree()
+        XCTAssertEqual(store.nodes[root.index].size, 130)
+    }
+
     func testInodeTrackerMarksFirstOnly() async {
         let tracker = InodeTracker()
         let first = tracker.mark(file: NSNumber(value: 123), volume: NSNumber(value: 1))
@@ -39,8 +74,8 @@ final class DiskVisualizerTests: XCTestCase {
 
     func testScanCacheRoundTrip() throws {
         let store = NodeStore()
-        let root = FileNode(url: URL(fileURLWithPath: "/tmp/cache"), isDirectory: true, store: store)
-        let child = FileNode(url: URL(fileURLWithPath: "/tmp/cache/child.txt"), isDirectory: false, parent: root, store: store)
+        var root = FileNode(url: URL(fileURLWithPath: "/tmp/cache"), isDirectory: true, store: store)
+        var child = FileNode(url: URL(fileURLWithPath: "/tmp/cache/child.txt"), isDirectory: false, parent: root, store: store)
         child.size = 42
         root.children = [child]
         root.size = 42
