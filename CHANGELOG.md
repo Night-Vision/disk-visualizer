@@ -55,6 +55,20 @@
   - The Finder / Trash / Terminal buttons in the sidebar inspector card dropped their text labels (`Fin…`, `Tra…`, `Ter…`) which were being truncated by sidebar width. The three icons (`folder`, `trash`, `terminal`) remain, with hover tooltips and VoiceOver labels intact.
 
 ### ⚡ Performance
+- **FileNode is now a 16-byte struct over a flat array**
+  - `FileNode` was a heap-allocated class (~200+ bytes each: UUID, URL, name, children array, class header). It's now a struct wrapping a `(NodeStore, Int)` index pair, with all node data in a single contiguous `[CompactNode]`. Full-disk scans with tens of thousands of nodes save tens of MB and drop per-node allocation churn.
+- **Hard-link dedup no longer hops through an actor per file**
+  - `InodeTracker` was an `actor`, so every hard-linked file (`linkCount > 1`, common under `/System` and Xcode toolchains) paid an actor-hop to call `mark`. It's now a plain class guarded by an `OSAllocatedUnfairLock`; the call is a lock/unlock on the current thread.
+- **Hover/click hit-testing is O(log n) per ring**
+  - The sunburst's hit-test used to linearly scan every segment per mouse move. Segments within each depth ring form a contiguous angle-partitioned array, so hover now binary-searches the ring in O(log n). No more full O(n) scan on every hover frame.
+- **Wedge colors are computed once per tree change, not per frame**
+  - `paletteColor` (which round-trips through `NSColor` for lightness adjustment) was called for every segment in every `draw()` pass. Colors are now cached in a parallel `segmentColors` array at rebuild time and only recomputed when the tree, root, or color scheme changes.
+- **Window resize no longer rebuilds segments or colors**
+  - Segment angles derive from byte sizes and colors from node/root/scheme — neither depends on canvas size. Resizing now only recomputes the cached ring width instead of discarding and rebuilding both arrays on every resize frame.
+- **Detail panel no longer re-sorts children on every render**
+  - The right-side list sorted `children` by size on every body evaluation. It now renders the store's maintained size-descending order directly.
+- **Modification dates use `FormatStyle` instead of a `DateFormatter` per call**
+  - `formattedModificationDate` no longer constructs a fresh ICU-backed `DateFormatter` for each node.
 - **Hard-link dedup without a second stat syscall**
   - `InodeTracker` now keys on `fileResourceIdentifier` / `volumeIdentifier`, which arrive with the same bulk resource fetch the scanner already performs. The previous per-file `attributesOfItem(atPath:)` for every file with `linkCount > 1` is gone, so link-heavy trees (`/System`, Xcode toolchains) no longer stall the 16 concurrent scan tasks on blocking stats.
 - **Deep-subtree size aggregation is now parallel**
@@ -78,6 +92,8 @@
   - Same loop now honors `Self.shouldSkip(_:)` so it doesn't follow the firmlink into the APFS data volume at `/System/Volumes/Data` (`skipRootPaths`) — saving an extra full pass over that volume per shallow-scan root.
 
 ### 🐛 Fixes
+- **Detail list stays sorted after trashing files**
+  - Trashing a node shrank its siblings but left them in a stale order, which the detail panel's per-render sort had been masking. `removeFromTree` now restores the size-descending `childIndices` order at the mutation boundary, and the detail panel trusts the store's order.
 - **Hidden system directories are skipped again**
   - The `skipRootHiddenPrefixes` check (`.Spotlight-V100`, `.fseventsd`, `.DocumentRevisions-V100`, `.vol`) compared absolute paths against relative names, so it never matched. It now matches `url.lastPathComponent`, catching these directories at the root of any volume, not just the boot volume.
 - **Duplicate counting on full-disk scans**
