@@ -22,9 +22,13 @@ struct BreadcrumbView: View {
                 Button(node.name) {
                     onSelect(node == appRoot ? nil : node)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                // The last crumb is the current location — clicking it is a
+                // no-op, so gray it out as a native "you are here" cue.
+                .disabled(node == path.last)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(node == path.last ? .secondary : .primary)
 
                 if node != path.last {
                     Text("›")
