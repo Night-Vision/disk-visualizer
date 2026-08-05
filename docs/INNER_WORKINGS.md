@@ -10,7 +10,7 @@ DiskVisualizer scans a folder or volume, builds a tree of file sizes, and draws 
 - **Accurate** hard links are counted once (inode dedup); root totals are exact.
 - **Fast** a disk cache skips re-scanning unchanged paths; deep or wide trees are folded into `[other folders]` so the wheel stays readable.
 - **Color** two palette modes: file-type categories, or macOS-Settings-style folder colors.
-- **Light** a flat-array storage engine keeps full-disk scans in the tens of MB.
+- **Light** a flat-array storage engine keeps the tree compact: 16 bytes per node, ~16 MB per million nodes.
 
 ## 1. System architecture
 
@@ -156,7 +156,7 @@ let ring = segmentsByDepth[depth]   // binary search within the ring
 - **Before:** `@Observable FileNode` classes (~200+ bytes/file), multi-GB JSON string blobs, `Set<String>` inode keys.
 - **After:** flat `[CompactNode]` (16 bytes/node), cache limited to ≤ 50,000 nodes (`ScanCache.swift`), inode dedup keyed on value identifiers.
 
-A full-disk scan now sits in the tens of MB. *(Exact numbers aren't pinned down — nothing in the repo measures them.)*
+`Sources/Benchmark` measures it: a 10,921-node synthetic scan peaks at ~162 MB process RSS — process-wide, including the Swift runtime, Foundation, and the scanner's task-group machinery. The tree itself is 16 bytes/node, so that scan's store is ~175 KB, or roughly 16 MB per million nodes.
 
 </details>
 

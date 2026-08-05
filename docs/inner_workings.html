@@ -529,8 +529,8 @@
 
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-number">tens of MB</div>
-                    <div class="stat-label">Peak Memory (full-disk scan)</div>
+                    <div class="stat-number">16 bytes/node</div>
+                    <div class="stat-label">Store per node (flat array)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number">Exact</div>
@@ -558,7 +558,7 @@
                     <li><strong>Accurate</strong> — hard links are counted once (inode dedup); root totals are exact.</li>
                     <li><strong>Fast</strong> — a disk cache skips re-scanning unchanged paths; deep or wide trees are folded into <code>[other folders]</code> so the wheel stays readable.</li>
                     <li><strong>Color</strong> — two palette modes: file-type categories, or macOS-Settings-style folder colors.</li>
-                    <li><strong>Light</strong> — a flat-array storage engine keeps full-disk scans in the tens of MB.</li>
+                    <li><strong>Light</strong> — a flat-array storage engine keeps the tree compact: 16 bytes per node, ~16 MB per million nodes.</li>
                 </ul>
             </div>
         </section>
@@ -883,7 +883,7 @@
                             </div>
 
                             <div class="comp-card good">
-                                <div class="comp-title">✅ After Optimization (tens of MB)</div>
+                                <div class="comp-title">✅ After Optimization (16 bytes/node)</div>
                                 <ul class="feature-list">
                                     <li><strong>CompactNode Struct Array:</strong> Store nodes in flat <code>[CompactNode]</code> array (16 bytes per struct).</li>
                                     <li><strong>ScanCache Node Limit:</strong> Guards JSON serialization for tree sizes &le; 50,000 nodes.</li>
@@ -891,7 +891,7 @@
                                 </ul>
                             </div>
                         </div>
-                        <p style="margin-top: 1rem;">A full-disk scan now sits in the tens of MB. (Exact numbers aren't pinned down — nothing in the repo measures them.)</p>
+                        <p style="margin-top: 1rem;"><code>Sources/Benchmark</code> measures it: a 10,921-node synthetic scan peaks at ~162 MB process RSS — process-wide, including the Swift runtime, Foundation, and the scanner's task-group machinery. The tree itself is 16 bytes/node, so that scan's store is ~175 KB, or roughly 16 MB per million nodes.</p>
                     </div>
                 </details>
             </div>

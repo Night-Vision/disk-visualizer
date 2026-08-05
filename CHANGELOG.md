@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Docs: Inner Workings v2 (two-tier rewrite)**
+  - Added `docs/INNER_WORKINGS.md`, the canonical GitHub-rendered deep dive, with plain-language intros + expandable `<details>` code, a TL;DR, glossary, and source map.
+  - Rewrote `docs/inner_workings.html` to mirror it: self-contained (no Google Fonts), styled `<details>` tiers.
+  - Corrected stale claims (removed "lock-free", "100% byte-level", fabricated memory numbers) and documented `[other folders]` aggregation + per-ring binary-search hit testing.
+  - Added `README.md` (install + build + docs links); now tracking `docs/` and `scripts/` in git.
+
 - **macOS Drag-to-Applications DMG Installer Script**
   - Added `scripts/create_installer.sh` to package a native macOS `.dmg` installer with the classic drag-to-Applications layout.
   - Automatically handles CWD independence, robust `trap cleanup EXIT` unmounting, `600x380` Finder window bounds with 128px icons, and compressed `UDZO` output.
