@@ -344,11 +344,11 @@ private struct SunburstCanvas: View {
             height: SunburstLayout.centerHoleRadius * 2
         ))
         context.fill(centerPath, with: .color(.white.opacity(0.12)))
-        context.stroke(centerPath, with: .color(.white.opacity(0.3)), lineWidth: 1)
+        context.stroke(centerPath, with: .color(.white.opacity(0.3)), lineWidth: 1 / animatedScale)
 
         // Wedges.
         for (segment, color) in zip(segments, segmentColors) {
-            drawSegment(segment, color: color, center: center, ringWidth: ringWidth, in: &context)
+            drawSegment(segment, color: color, center: center, ringWidth: ringWidth, animatedScale: animatedScale, in: &context)
         }
 
         // Root label.
@@ -356,18 +356,19 @@ private struct SunburstCanvas: View {
         context.draw(rootText, at: center, anchor: .center)
     }
 
-    private func drawSegment(_ segment: SunburstSegment, color: Color, center: CGPoint, ringWidth: CGFloat, in context: inout GraphicsContext) {
+    private func drawSegment(_ segment: SunburstSegment, color: Color, center: CGPoint, ringWidth: CGFloat, animatedScale: CGFloat, in context: inout GraphicsContext) {
         let path = wedgePath(segment: segment, center: center, ringWidth: ringWidth)
         let isHovered = hoveredNode.map { $0 == segment.node } ?? false
 
         context.fill(path, with: .color(color))
 
-        // Petal-like stroke gap.
-        context.stroke(path, with: .color(.black.opacity(0.35)), lineWidth: 1.2)
+        // Stroke width is in the scaled coordinate space — divide out the zoom
+        // so the petal gap stays a constant screen-space hairline.
+        context.stroke(path, with: .color(.black.opacity(0.35)), lineWidth: 1.2 / animatedScale)
 
         if isHovered {
             context.fill(path, with: .color(.white.opacity(0.18)))
-            context.stroke(path, with: .color(.white.opacity(0.6)), lineWidth: 1.5)
+            context.stroke(path, with: .color(.white.opacity(0.6)), lineWidth: 1.5 / animatedScale)
         }
     }
 
