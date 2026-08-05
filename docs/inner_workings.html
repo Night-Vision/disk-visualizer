@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disk Visualizer — Inner Workings</title>
+    <style>
+        :root {
+            --bg-dark: #070a12;
+            --bg-card: rgba(15, 22, 36, 0.78);
+            --bg-card-hover: rgba(25, 35, 56, 0.88);
+            --border-color: rgba(255, 255, 255, 0.09);
+            --border-glow: rgba(56, 189, 248, 0.3);
+
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.4);
+            --accent-purple: #a855f7;
+            --accent-pink: #ec4899;
+            --accent-teal: #2dd4bf;
+            --accent-gold: #facc15;
+            --accent-orange: #fb923c;
+            --accent-slate: #64748b;
+
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+
+            --code-bg: #0b0f19;
+            --font-main: system-ui, -apple-system, "Segoe UI", sans-serif;
+            --font-title: system-ui, -apple-system, "Segoe UI", sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            line-height: 1.6;
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.09) 0%, transparent 40%),
+                radial-gradient(circle at 90% 25%, rgba(168, 85, 247, 0.09) 0%, transparent 45%),
+                radial-gradient(circle at 50% 75%, rgba(45, 212, 191, 0.07) 0%, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        a:hover { text-decoration: underline; }
+
+        /* Navbar */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(7, 10, 18, 0.88);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.9rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .logo {
+            font-family: var(--font-title);
+            font-size: 1.4rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent-pink));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            box-shadow: 0 0 16px var(--primary-glow);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.25rem;
+            list-style: none;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 3.5rem 1rem 3rem;
+            position: relative;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 0.4rem 1.1rem;
+            border-radius: 9999px;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: var(--primary);
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .hero h1 {
+            font-family: var(--font-title);
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1.12;
+            margin-bottom: 1.25rem;
+            letter-spacing: -0.03em;
+        }
+
+        .hero h1 span {
+            background: linear-gradient(135deg, #38bdf8 0%, #a855f7 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 800px;
+            margin: 0 auto 2.5rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 3.5rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 1.5rem;
+            backdrop-filter: blur(14px);
+            transition: all 0.25s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-glow);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .stat-number {
+            font-family: var(--font-title);
+            font-size: 2.3rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Section Styling */
+        section {
+            margin-bottom: 4.5rem;
+        }
+
+        .section-title {
+            font-family: var(--font-title);
+            font-size: 2.1rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-subtitle {
+            color: var(--text-muted);
+            font-size: 1.08rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Glass Cards */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 36px rgba(0, 0, 0, 0.25);
+            margin-bottom: 2rem;
+        }
+
+        /* Schematic Diagram Containers */
+        .schematic-box {
+            background: #090e1a;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin: 1.5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .schematic-title {
+            font-family: var(--font-title);
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.75rem;
+        }
+
+        /* Pipeline Flow Grid */
+        .pipeline-flow {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .pipeline-step {
+            background: rgba(18, 26, 43, 0.85);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.25rem;
+            position: relative;
+            transition: all 0.25s ease;
+        }
+
+        .pipeline-step:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.18);
+        }
+
+        .step-num {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .step-title {
+            font-family: var(--font-title);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        .step-desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Color Swatch Matrix */
+        .swatch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .swatch-card {
+            background: rgba(13, 19, 33, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .swatch-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .swatch-category {
+            font-family: var(--font-title);
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .swatch-colors {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .swatch-pill {
+            flex: 1;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .swatch-pill.dark-text { color: #ffffff; }
+
+        .swatch-rules {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Memory Comparison Grid */
+        .comp-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        @media (max-width: 850px) {
+            .comp-grid, .grid-2 { grid-template-columns: 1fr; }
+            .hero h1 { font-size: 2.3rem; }
+        }
+
+        .comp-card {
+            border-radius: 14px;
+            padding: 1.5rem;
+            background: rgba(11, 16, 28, 0.85);
+            border: 1px solid var(--border-color);
+        }
+
+        .comp-card.bad { border-color: rgba(236, 72, 153, 0.4); }
+        .comp-card.good { border-color: rgba(45, 212, 191, 0.4); }
+
+        .comp-title {
+            font-family: var(--font-title);
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+
+        .bad .comp-title { color: var(--accent-pink); }
+        .good .comp-title { color: var(--accent-teal); }
+
+        /* Data Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* Code Blocks */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: #e6edf3;
+            line-height: 1.5;
+            margin: 1rem 0;
+        }
+
+        code .keyword { color: #ff7b72; font-weight: 600; }
+        code .type { color: #ffa657; }
+        code .string { color: #a5d6ff; }
+        code .comment { color: #8b949e; font-style: italic; }
+        code .func { color: #d2a8ff; }
+        code .number { color: #79c0ff; }
+
+        /* Feature List */
+        .feature-list {
+            list-style: none;
+            margin: 1rem 0;
+        }
+
+        .feature-list li {
+            position: relative;
+            padding-left: 1.75rem;
+            margin-bottom: 0.85rem;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .feature-list li::before {
+            content: "➔";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+
+        /* Two-tier collapsibles */
+        details {
+            margin: 1.25rem 0;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: rgba(18, 26, 43, 0.6);
+        }
+
+        summary {
+            cursor: pointer;
+            padding: 0.9rem 1.25rem;
+            font-weight: 600;
+            color: var(--primary);
+            user-select: none;
+        }
+
+        details[open] summary { border-bottom: 1px solid var(--border-color); }
+        details .details-body { padding: 0 1.25rem 1.25rem; }
+        details table { width: 100%; border-collapse: collapse; }
+        details th, details td { text-align: left; padding: 0.4rem 0.6rem; font-size: 0.88rem; border-bottom: 1px solid var(--border-color); }
+        details th { color: var(--text-muted); }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border-color);
+            padding: 3rem 1.5rem;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            background: rgba(7, 10, 18, 0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">⚡</div>
+            Disk Visualizer
+        </div>
+        <ul class="nav-links">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#tldr">TL;DR</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#backend">Backend</a></li>
+            <li><a href="#frontend">Frontend</a></li>
+            <li><a href="#palette">Palette</a></li>
+            <li><a href="#optimizations">Memory</a></li>
+            <li><a href="#packaging">Packaging</a></li>
+            <li><a href="#glossary">Glossary</a></li>
+            <li><a href="#sourcemap">Source Map</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+
+        <!-- Hero Section -->
+        <header class="hero" id="overview">
+            <div class="hero-badge">macOS 14+ Sonoma Architecture</div>
+            <h1>Inner Workings of <span>Disk Visualizer</span></h1>
+            <p>A comprehensive technical breakdown of the lock-based Swift Concurrency backend, compact flat-array storage engine, dynamic dual-mode FileType palette, and interactive polar sunburst geometry.</p>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">tens of MB</div>
+                    <div class="stat-label">Peak Memory (full-disk scan)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">Exact</div>
+                    <div class="stat-label">Root Totals &amp; Hard-Link Dedup</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">O(1)</div>
+                    <div class="stat-label">Category &amp; Inode Lookup</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">Swift 5.9</div>
+                    <div class="stat-label">OSAllocatedUnfairLock</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- TL;DR -->
+        <section id="tldr">
+            <h2 class="section-title">TL;DR</h2>
+            <p class="section-subtitle">DiskVisualizer scans a folder or volume, builds a tree of file sizes, and draws it as an interactive sunburst chart.</p>
+
+            <div class="glass-card">
+                <ul class="feature-list">
+                    <li><strong>Scan</strong> — walks the tree with up to 16 parallel workers, fetching file metadata in bulk: one system call per directory, not one per file.</li>
+                    <li><strong>Accurate</strong> — hard links are counted once (inode dedup); root totals are exact.</li>
+                    <li><strong>Fast</strong> — a disk cache skips re-scanning unchanged paths; deep or wide trees are folded into <code>[other folders]</code> so the wheel stays readable.</li>
+                    <li><strong>Color</strong> — two palette modes: file-type categories, or macOS-Settings-style folder colors.</li>
+                    <li><strong>Light</strong> — a flat-array storage engine keeps full-disk scans in the tens of MB.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- System Architecture Overview -->
+        <section id="architecture">
+            <h2 class="section-title">1. System architecture</h2>
+            <p class="section-subtitle">Data flows through six layers, each with one job: <code>macOS VFS → DiskScanner → InodeTracker → NodeStore → SunburstLayout → SunburstCanvas</code>.</p>
+
+            <div class="glass-card">
+                <div class="schematic-box">
+                    <div class="schematic-title">
+                        <span>⚡ System Architecture Pipeline Schematic</span>
+                    </div>
+
+                    <div class="pipeline-flow">
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 1</span>
+                            <div class="step-title">macOS VFS</div>
+                            <div class="step-desc">Kernel file-system metadata, fetched in bulk via <code>URLResourceKey</code>s.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 2</span>
+                            <div class="step-title">DiskScanner</div>
+                            <div class="step-desc">Walks directories with <code>withTaskGroup</code>, up to 16 concurrent workers.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 3</span>
+                            <div class="step-title">InodeTracker</div>
+                            <div class="step-desc">De-duplicates hard links so a file counts once.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 4</span>
+                            <div class="step-title">NodeStore</div>
+                            <div class="step-desc">Flat <code>[CompactNode]</code> array; every node is a 16-byte struct.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 5</span>
+                            <div class="step-title">SunburstLayout</div>
+                            <div class="step-desc">Turns the tree into polar wedges (angle ∝ size).</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">LAYER 6</span>
+                            <div class="step-title">SunburstCanvas</div>
+                            <div class="step-desc">Renders wedges on a SwiftUI <code>Canvas</code> and hit-tests pointer events.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <details>
+                    <summary>Layer-by-layer (under the hood)</summary>
+                    <div class="details-body">
+                        <table>
+                            <tr><th>Layer</th><th>Job</th></tr>
+                            <tr><td>macOS VFS</td><td>Kernel file-system metadata, fetched in bulk via <code>URLResourceKey</code>s</td></tr>
+                            <tr><td>DiskScanner</td><td>Walks directories with <code>withTaskGroup</code>, up to 16 concurrent workers</td></tr>
+                            <tr><td>InodeTracker</td><td>De-duplicates hard links so a file counts once</td></tr>
+                            <tr><td>NodeStore</td><td>Flat <code>[CompactNode]</code> array; every node is a 16-byte struct</td></tr>
+                            <tr><td>SunburstLayout</td><td>Turns the tree into polar wedges (angle ∝ size)</td></tr>
+                            <tr><td>SunburstCanvas</td><td>Renders wedges on a SwiftUI <code>Canvas</code> and hit-tests pointer events</td></tr>
+                        </table>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Backend Deep Dive -->
+        <section id="backend">
+            <h2 class="section-title">2. Backend: scanning engine</h2>
+            <p class="section-subtitle">One scan is one pass over the tree. The scanner asks macOS for every file's size, kind, link count, and identity in a single bulk call per directory instead of one stat call per file, and walks directories with up to 16 parallel workers. Both hot loops yield to the main thread every 256 items so the UI stays responsive during whole-disk scans.</p>
+
+            <div class="grid-2">
+                <div class="glass-card">
+                    <h3>Bulk OS Kernel Metadata Fetching</h3>
+                    <p>Instead of executing individual <code>lstat</code> system calls per file, <code>DiskScanner</code> requests bulk resource keys directly from the macOS kernel:</p>
+
+                    <details>
+                        <summary>Bulk resource fetch (under the hood)</summary>
+                        <div class="details-body">
+                            <p>The keys requested per directory (<code>Sources/DiskVisualizerLib/DiskScanner.swift</code>):</p>
+<pre><code><span class="keyword">private static let</span> resourceKeys: [<span class="type">URLResourceKey</span>] = [
+    .<span class="type">isDirectoryKey</span>,
+    .<span class="type">isPackageKey</span>,
+    .<span class="type">isSymbolicLinkKey</span>,
+    .<span class="type">fileSizeKey</span>,
+    .<span class="type">fileAllocatedSizeKey</span>,
+    .<span class="type">linkCountKey</span>,
+    .<span class="type">contentModificationDateKey</span>,
+    .<span class="type">fileResourceIdentifierKey</span>,  <span class="comment">// hard-link identity</span>
+    .<span class="type">volumeIdentifierKey</span>
+]
+
+<span class="comment">// Single bulk OS kernel call per directory</span>
+<span class="keyword">let</span> contents = <span class="keyword">try</span> <span class="type">FileManager</span>.default.<span class="func">contentsOfDirectory</span>(
+    at: node.url,
+    includingPropertiesForKeys: resourceKeys,
+    options: [.<span class="type">skipsSubdirectoryDescendants</span>]
+)</code></pre>
+                        </div>
+                    </details>
+
+                    <ul class="feature-list">
+                        <li>Eliminates most disk I/O context switches during full volume scans.</li>
+                        <li>Delivers <code>fileResourceIdentifierKey</code> so hard-link identity arrives in bulk.</li>
+                        <li>Yields thread execution every 256 items to keep the main UI responsive.</li>
+                    </ul>
+                </div>
+
+                <div class="glass-card">
+                    <h3>Inode Double-Counting Prevention</h3>
+                    <p>Two names pointing at the same file must count once, or <code>/System</code> and Xcode toolchains double-count. Each file's <code>fileResourceIdentifier</code> + <code>volumeIdentifier</code> is inserted into a set; the first insert wins and duplicates are skipped. <code>InodeTracker</code> uses <code>OSAllocatedUnfairLock</code> for zero actor-hopping overhead:</p>
+
+                    <details>
+                        <summary>InodeTracker (under the hood)</summary>
+                        <div class="details-body">
+<pre><code><span class="keyword">final class</span> <span class="type">InodeTracker</span>: <span class="type">@unchecked</span> <span class="type">Sendable</span> {
+    <span class="keyword">private let</span> lock = <span class="type">OSAllocatedUnfairLock</span>(initialState: <span class="type">Set</span>&lt;<span class="type">FileIdentity</span>&gt;())
+
+    <span class="keyword">func</span> <span class="func">mark</span>(file: (<span class="keyword">any</span> <span class="type">NSObjectProtocol</span> &amp; <span class="type">NSCopying</span> &amp; <span class="type">NSSecureCoding</span>)?,
+              volume: (<span class="keyword">any</span> <span class="type">NSObjectProtocol</span> &amp; <span class="type">NSCopying</span> &amp; <span class="type">NSSecureCoding</span>)?) -&gt; <span class="type">Bool</span> {
+        lock.<span class="func">withLock</span> { state <span class="keyword">in</span>
+            <span class="keyword">guard let</span> file = file <span class="keyword">as?</span> <span class="type">NSObject</span>,
+                  <span class="keyword">let</span> volume = volume <span class="keyword">as?</span> <span class="type">NSObject</span> <span class="keyword">else</span> { <span class="keyword">return true</span> }
+            <span class="keyword">return</span> state.<span class="func">insert</span>(<span class="type">FileIdentity</span>(file: <span class="type">AnyHashable</span>(file),
+                                             volume: <span class="type">AnyHashable</span>(volume))).inserted
+        }
+    }
+}</code></pre>
+                            <p>A plain lock, not an actor — hard-linked files don't pay an actor-hop per file.</p>
+                        </div>
+                    </details>
+
+                    <ul class="feature-list">
+                        <li>Replaces heavy actor-isolated calls with lightweight lock operations.</li>
+                        <li>Hard links to the same APFS inode share a resource key and count exactly once.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Frontend & Polar Math -->
+        <section id="frontend">
+            <h2 class="section-title">3. Frontend: polar geometry</h2>
+            <p class="section-subtitle">The sunburst is a polar bar chart: each folder's bytes are a slice of the circle, sized proportionally — a file using half a folder's bytes gets half the angle (slice angle = 2π × size/total).</p>
+
+            <div class="glass-card">
+                <h3>Polar Ring &amp; Angular Slice Math</h3>
+                <p><code>SunburstLayout</code> calculates proportional angular slices and radial ring bounds for each node:</p>
+
+                <details>
+                    <summary>Angle &amp; ring math (under the hood)</summary>
+                    <div class="details-body">
+<pre><code><span class="keyword">let</span> fraction = <span class="type">Double</span>(child.size) / <span class="type">Double</span>(total)
+<span class="keyword">let</span> slice = (end - start) * fraction
+
+<span class="keyword">let</span> innerRadius = centerHoleRadius + <span class="type">CGFloat</span>(depth - <span class="number">1</span>) * ringWidth
+<span class="keyword">let</span> outerRadius = centerHoleRadius + <span class="type">CGFloat</span>(depth) * ringWidth - ringGap</code></pre>
+                        <p>Constants: <code>centerHoleRadius = 44</code>, <code>ringGap = 1</code>, at most <code>maxDepth = 8</code> rings.</p>
+                    </div>
+                </details>
+
+                <h3 style="margin-top: 1.5rem;">Polar Coordinate Hit Testing via <code>atan2</code></h3>
+                <p>Pointer events are converted to polar coordinates with <code>atan2</code>, then each ring is searched with a binary search (wedges within a ring are angle-sorted), so hover is O(log n) per ring rather than a scan of every wedge.</p>
+
+                <details>
+                    <summary>Polar hit-test (under the hood)</summary>
+                    <div class="details-body">
+<pre><code><span class="keyword">let</span> dx = point.x - center.x
+<span class="keyword">let</span> dy = point.y - center.y
+<span class="keyword">let</span> distance = <span class="func">hypot</span>(dx, dy)
+
+<span class="keyword">var</span> angle = <span class="func">atan2</span>(dy, dx)
+<span class="keyword">if</span> angle &lt; <span class="number">0</span> { angle += .pi * <span class="number">2</span> }
+
+<span class="keyword">let</span> depth = <span class="type">Int</span>((distance - centerHoleRadius) / ringWidth) + <span class="number">1</span>
+<span class="keyword">let</span> ring = segmentsByDepth[depth]   <span class="comment">// binary search within the ring</span></code></pre>
+                    </div>
+                </details>
+
+                <h3 style="margin-top: 1.5rem;">Aggregation</h3>
+                <p>Wide directories keep at most 50 children (<code>maxChildrenPerNode</code>), and anything past depth 8 is folded into an <code>[other folders]</code> wedge, so a huge tree stays a readable 8 rings.</p>
+            </div>
+        </section>
+
+        <!-- FileType Palette & Mass Gray Fixes -->
+        <section id="palette">
+            <h2 class="section-title">4. Color: dual-mode palette</h2>
+            <p class="section-subtitle">Left to defaults, every wedge would be the same gray and the wheel would be unreadable. <em>File Type</em> mode classifies each node into one of 8 functional categories, each with a distinct color that has dark and light variants and adapts to the macOS appearance. <em>Named</em> mode colors by top-level folder instead.</p>
+
+            <div class="glass-card">
+                <p><code>FileTypeCategory</code> classifies file nodes into 8 functional categories when in <strong>File Type</strong> mode, eliminating monotonous gray wheels through name classification, ancestor color inheritance, and depth lightness scaling.</p>
+
+                <div class="swatch-grid">
+                    <!-- Category 1 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Developer / Code</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #2dd4bf;">Dark #2DD4BF</div>
+                            <div class="swatch-pill" style="background: #0d9488;">Light #0D9488</div>
+                        </div>
+                        <div class="swatch-rules">.swift, .js, .py, .git/, node_modules/</div>
+                    </div>
+
+                    <!-- Category 2 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Executables &amp; Binaries</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #ec4899;">Dark #EC4899</div>
+                            <div class="swatch-pill" style="background: #db2777;">Light #DB2777</div>
+                        </div>
+                        <div class="swatch-rules">.app, .dylib, .bin, .framework</div>
+                    </div>
+
+                    <!-- Category 3 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Media (Images/Video)</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #f43f5e;">Dark #F43F5E</div>
+                            <div class="swatch-pill" style="background: #e11d48;">Light #E11D48</div>
+                        </div>
+                        <div class="swatch-rules">.png, .jpg, .heic, .mp4, .mov</div>
+                    </div>
+
+                    <!-- Category 4 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Documents &amp; Data</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #facc15;">Dark #FACC15</div>
+                            <div class="swatch-pill dark-text" style="background: #d97706;">Light #D97706</div>
+                        </div>
+                        <div class="swatch-rules">.pdf, .docx, .xlsx, .txt, .csv</div>
+                    </div>
+
+                    <!-- Category 5 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Archives &amp; Packages</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #a855f7;">Dark #A855F7</div>
+                            <div class="swatch-pill" style="background: #9333ea;">Light #9333EA</div>
+                        </div>
+                        <div class="swatch-rules">.zip, .tar.gz, .dmg, .pkg</div>
+                    </div>
+
+                    <!-- Category 6 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Audio &amp; Sound</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #fb923c;">Dark #FB923C</div>
+                            <div class="swatch-pill" style="background: #ea580c;">Light #EA580C</div>
+                        </div>
+                        <div class="swatch-rules">.mp3, .wav, .flac, .m4a</div>
+                    </div>
+
+                    <!-- Category 7 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">System Caches &amp; Logs</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill dark-text" style="background: #64748b;">Dark #64748B</div>
+                            <div class="swatch-pill dark-text" style="background: #475569;">Light #475569</div>
+                        </div>
+                        <div class="swatch-rules">.cache, .log, .tmp, &amp; files &lt; 1 MB</div>
+                    </div>
+
+                    <!-- Category 8 -->
+                    <div class="swatch-card">
+                        <div class="swatch-header">
+                            <span class="swatch-category">Unclassified / Folders</span>
+                        </div>
+                        <div class="swatch-colors">
+                            <div class="swatch-pill" style="background: #38bdf8;">Dark #38BDF8</div>
+                            <div class="swatch-pill" style="background: #0284c7;">Light #0284C7</div>
+                        </div>
+                        <div class="swatch-rules">Directories &amp; unclassified items</div>
+                    </div>
+                </div>
+
+                <h4 style="margin-top: 1.5rem; color: var(--primary);">Anti-Mass-Gray Mechanism</h4>
+                <ul class="feature-list">
+                    <li><strong>Ancestor Category Inheritance:</strong> everything inside a categorized tree (e.g. <code>node_modules/</code> or <code>.git/</code>) inherits its parent's category.</li>
+                    <li><strong>Depth Lightness Boost:</strong> sub-slices scale lightness by <code>adjustLightness(by: depth * 0.08)</code> so concentric sub-wedges stay visually distinct.</li>
+                    <li><strong>Small Item Grouping:</strong> extensionless files under 1 MB map to the muted <em>System Caches &amp; Logs</em> tone.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Memory Optimizations -->
+        <section id="optimizations">
+            <h2 class="section-title">5. Memory optimizations</h2>
+            <p class="section-subtitle">An earlier version stored every file as a heap object (~200+ bytes each) and serialized whole trees as JSON — full-disk scans ran into gigabytes of RAM. The tree now lives in a flat array of 16-byte structs, the cache is capped, and inode keys are value identifiers instead of heap strings.</p>
+
+            <div class="glass-card">
+                <details>
+                    <summary>Before / after (under the hood)</summary>
+                    <div class="details-body">
+                        <div class="comp-grid">
+                            <div class="comp-card bad">
+                                <div class="comp-title">❌ Before Optimization (multi-GB RAM)</div>
+                                <ul class="feature-list">
+                                    <li><strong>Heap Object Explosion:</strong> Millions of <code>@Observable FileNode</code> classes allocated 200+ bytes per file.</li>
+                                    <li><strong>JSON String Spikes:</strong> Encoding multi-million-node trees created multi-GB temporary strings.</li>
+                                    <li><strong>String Inode Keys:</strong> <code>Set&lt;String&gt;</code> allocated millions of <code>"device:inode"</code> heap strings.</li>
+                                </ul>
+                            </div>
+
+                            <div class="comp-card good">
+                                <div class="comp-title">✅ After Optimization (tens of MB)</div>
+                                <ul class="feature-list">
+                                    <li><strong>CompactNode Struct Array:</strong> Store nodes in flat <code>[CompactNode]</code> array (16 bytes per struct).</li>
+                                    <li><strong>ScanCache Node Limit:</strong> Guards JSON serialization for tree sizes &le; 50,000 nodes.</li>
+                                    <li><strong>Value Identifier Keys:</strong> Inode dedup uses kernel resource identifier tuples without heap string allocs.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <p style="margin-top: 1rem;">A full-disk scan now sits in the tens of MB. (Exact numbers aren't pinned down — nothing in the repo measures them.)</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- App Packaging & DMG Installer -->
+        <section id="packaging">
+            <h2 class="section-title">6. Packaging &amp; notarization</h2>
+            <p class="section-subtitle">One script turns the SPM build into a drag-to-Applications DMG installer, with an optional notarized production path.</p>
+
+            <div class="glass-card">
+                <div class="schematic-box">
+                    <div class="schematic-title">
+                        <span>📦 Packaging &amp; Notarization Flowchart</span>
+                    </div>
+
+                    <div class="pipeline-flow">
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 1</span>
+                            <div class="step-title">SPM Build</div>
+                            <div class="step-desc">Compiles release executable via <code>swift build -c release</code>.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 2</span>
+                            <div class="step-title">Bundle Assembly</div>
+                            <div class="step-desc">Assembles <code>DiskVisualizer.app</code> with <code>Info.plist</code> &amp; <code>AppIcon.icns</code>.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 3</span>
+                            <div class="step-title">Code Signing</div>
+                            <div class="step-desc">Signs bundle using <code>DEVELOPER_ID_APPLICATION</code> identity or ad-hoc (<code>-s -</code>).</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 4</span>
+                            <div class="step-title">DMG Creation</div>
+                            <div class="step-desc">Creates staging layout (<code>ln -s /Applications</code>) &amp; mounts temporary read-write DMG.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 5</span>
+                            <div class="step-title">Finder Layout</div>
+                            <div class="step-desc">AppleScript sets the window bounds, 128px icons, and flushes <code>.DS_Store</code>.</div>
+                        </div>
+
+                        <div class="pipeline-step">
+                            <span class="step-num">STEP 6</span>
+                            <div class="step-title">Notarize &amp; Staple</div>
+                            <div class="step-desc">Submits via <code>xcrun notarytool</code>, staples ticket, and validates via <code>spctl</code> assessment.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <details>
+                    <summary>Build commands (under the hood)</summary>
+                    <div class="details-body">
+<pre><code>./scripts/create_installer.sh                                   # ad-hoc local build
+NOTARIZE=true DEVELOPER_ID_APPLICATION="…" KEYCHAIN_PROFILE="…" ./scripts/create_installer.sh</code></pre>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Glossary -->
+        <section id="glossary">
+            <h2 class="section-title">7. Glossary</h2>
+            <div class="glass-card">
+                <table>
+                    <tr><th>Term</th><th>Meaning</th></tr>
+                    <tr><td>VFS</td><td>The kernel's virtual file-system layer that serves metadata</td></tr>
+                    <tr><td>Inode</td><td>The kernel's per-file record; two names can share one inode (hard link)</td></tr>
+                    <tr><td>Hard link</td><td>A second name for the same file — must be counted once for accurate usage</td></tr>
+                    <tr><td>Firmlink</td><td>APFS's directory-level link (e.g. <code>/System/Volumes/Data</code>) — skipped to avoid double counting</td></tr>
+                    <tr><td>Task group</td><td>Swift Concurrency's <code>withTaskGroup</code>; runs up to N workers in parallel</td></tr>
+                    <tr><td>UDZO</td><td>Compressed read-only DMG format (<code>hdiutil convert -format UDZO</code>)</td></tr>
+                    <tr><td>Ad-hoc signature</td><td>Code-signed with <code>-</code> (no Apple identity); downloaded builds need right-click → Open</td></tr>
+                    <tr><td>Notarization</td><td>Apple's server-side check + stapled ticket for frictionless installs</td></tr>
+                </table>
+            </div>
+        </section>
+
+        <!-- Source Map -->
+        <section id="sourcemap">
+            <h2 class="section-title">8. Source map</h2>
+            <div class="glass-card">
+                <table>
+                    <tr><th>File</th><th>Job</th></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerApp/DiskVisualizerApp.swift"><code>DiskVisualizerApp.swift</code></a></td><td><code>@main</code> entry, creates the <code>WindowGroup</code></td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/Volume.swift"><code>Volume.swift</code></a></td><td>Mounted-volume list for the sidebar</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/DiskScanner.swift"><code>DiskScanner.swift</code></a></td><td>The scan engine (bulk fetch, task groups, aggregation)</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/InodeTracker.swift"><code>InodeTracker.swift</code></a></td><td>Hard-link dedup</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/NodeStore.swift"><code>NodeStore.swift</code></a></td><td>Flat-array storage + all mutations</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/ScanCache.swift"><code>ScanCache.swift</code></a></td><td>JSON cache, capped at 50,000 nodes</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/SunburstLayout.swift"><code>SunburstLayout.swift</code></a></td><td>Polar wedge geometry + category sorting</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/SunburstView.swift"><code>SunburstView.swift</code></a></td><td>Canvas render, camera, hit-testing</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/ColorExtensions.swift"><code>ColorExtensions.swift</code></a></td><td>Palettes + <code>FileTypeCategory</code></td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Sources/DiskVisualizerLib/ContentView.swift"><code>ContentView.swift</code></a></td><td>Main view + app state</td></tr>
+                    <tr><td><a href="https://github.com/Night-Vision/disk-visualizer/blob/main/Tests/DiskVisualizerTests/DiskVisualizerTests.swift"><code>DiskVisualizerTests.swift</code></a></td><td>XCTest suite</td></tr>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>Disk Visualizer Architecture Documentation &copy; 2026. Built for macOS 14+ Sonoma with Swift 5.9 &amp; SwiftUI.</p>
+    </footer>
+
+</body>
+</html>
