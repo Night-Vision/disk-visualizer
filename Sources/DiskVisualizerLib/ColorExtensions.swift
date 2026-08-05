@@ -69,13 +69,14 @@ extension Color {
     private static let emeraldGreen  = Color(red: 0.063, green: 0.725, blue: 0.506) // #10B981
     private static let cyan          = Color(red: 0.024, green: 0.714, blue: 0.831) // #06B6D4
     private static let roseRed       = Color(red: 0.957, green: 0.247, blue: 0.369) // #F43F5E
-    private static let slateGray     = Color(red: 0.392, green: 0.455, blue: 0.545) // #64748B
-    private static let mutedCharcoal = Color(red: 0.294, green: 0.333, blue: 0.388) // #4B5563
+    private static let slateGray       = Color(red: 0.278, green: 0.333, blue: 0.412) // #475569 Dark Slate
+    private static let mutedCharcoal   = Color(red: 0.294, green: 0.333, blue: 0.388) // #4B5563
+    private static let unknownFileGray = Color(red: 0.612, green: 0.639, blue: 0.686) // #9CA3AF Neutral Gray
 
     // MARK: - Fallback / misc constants
 
-    /// Cool Slate (#64748B) — for aggregated nodes.
-    private static let coolSlate   = Color(red: 0.392, green: 0.455, blue: 0.545)
+    /// Cool Slate (#94A3B8) — for aggregated nodes.
+    private static let coolSlate   = Color(red: 0.580, green: 0.639, blue: 0.722)
     /// Soft Crimson (#FB7185) — for cache / temp / log paths.
     private static let softCrimson = Color(red: 0.984, green: 0.443, blue: 0.522)
 
@@ -188,7 +189,7 @@ extension Color {
         if audioExtensions.contains(ext)   { return cyan }
         if archiveExtensions.contains(ext) { return roseRed }
         if binaryExtensions.contains(ext)  { return slateGray }
-        return mutedCharcoal
+        return unknownFileGray
     }
 
     // MARK: - Public palette entry points
