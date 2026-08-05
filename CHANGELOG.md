@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-### ✨ New
+- **macOS Drag-to-Applications DMG Installer Script**
+  - Added `scripts/create_installer.sh` to package a native macOS `.dmg` installer with the classic drag-to-Applications layout.
+  - Automatically handles CWD independence, robust `trap cleanup EXIT` unmounting, `600x380` Finder window bounds with 128px icons, and compressed `UDZO` output.
+  - Supports production notarization (`NOTARIZE=true`) with `xcrun notarytool`, `stapler`, and `spctl` assessment.
+
 - **Drill-down animation now only runs on double-click**
   - Double-clicking a folder wedge on the sunburst plays a smooth scale entrance animation into the new root.
   - Breadcrumb navigation, scan completion, and trash updates no longer trigger the transition.
