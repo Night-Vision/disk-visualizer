@@ -175,23 +175,6 @@ extension Color {
         return nil
     }
 
-    // MARK: - File-type color
-
-    /// Return a flat category colour for a non-directory node based on its
-    /// file extension. Directories and generated aggregate nodes get a muted
-    /// neutral.
-    private static func fileTypeColor(for node: FileNode) -> Color {
-        let ext = node.url.pathExtension.lowercased()
-        if videoExtensions.contains(ext)   { return fuchsiaPurple }
-        if imageExtensions.contains(ext)   { return warmAmber }
-        if documentExtensions.contains(ext) { return indigoBlue }
-        if codeExtensions.contains(ext)    { return emeraldGreen }
-        if audioExtensions.contains(ext)   { return cyan }
-        if archiveExtensions.contains(ext) { return roseRed }
-        if binaryExtensions.contains(ext)  { return slateGray }
-        return unknownFileGray
-    }
-
     // MARK: - Public palette entry points
 
     /// Determine the display colour for a node in the sunburst or its legend.
@@ -250,22 +233,146 @@ extension Color {
             return Color(red: 0.78, green: 0.80, blue: 0.82)
         }
 
-        // 2. Cache → Soft Crimson.
-        if NodeCategory.categorize(node.url) == .cache {
-            return softCrimson
+        // 2. Inherit nearest non-unclassified category from ancestor chain + depth lightness boost.
+        var current: FileNode? = node
+        while let c = current {
+            let cat = FileTypeCategory.categorize(node: c)
+            if cat != .unclassifiedFolders {
+                let depthOffset = max(node.depth - c.depth, 0)
+                return cat.color.adjustLightness(by: Double(depthOffset) * 0.08)
+            }
+            if c == root { break }
+            current = c.parent
         }
 
-        // 3. Generated aggregate nodes → Cool Slate.
-        if isGeneratedMisc(node.name) {
-            return coolSlate
-        }
-
-        // 4. Directories → muted charcoal.
-        if node.isDirectory {
-            return mutedCharcoal
-        }
-
-        // 5. Extension-based category colour.
-        return fileTypeColor(for: node)
+        // 3. Fallback: unclassified color + ring depth boost for sub-slice distinction.
+        let depthOffset = max(node.depth - root.depth, 0)
+        return FileTypeCategory.unclassifiedFolders.color.adjustLightness(by: Double(depthOffset) * 0.08)
     }
+}
+
+// MARK: - Dynamic Color Helper & FileTypeCategory
+
+extension Color {
+    static func dynamic(dark: (r: Double, g: Double, b: Double), light: (r: Double, g: Double, b: Double)) -> Color {
+        let darkNS = NSColor(srgbRed: dark.r, green: dark.g, blue: dark.b, alpha: 1.0)
+        let lightNS = NSColor(srgbRed: light.r, green: light.g, blue: light.b, alpha: 1.0)
+        let dynamicNS = NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? darkNS : lightNS }
+        return Color(nsColor: dynamicNS)
+    }
+}
+
+public enum FileTypeCategory: Int, CaseIterable, Comparable, Sendable {
+    case developerCode
+    case executablesBinaries
+    case media
+    case documentsData
+    case archivesPackages
+    case audioSound
+    case systemCachesLogs
+    case unclassifiedFolders
+
+    public static func < (lhs: FileTypeCategory, rhs: FileTypeCategory) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    public static func isOrderedBefore(_ a: FileNode, _ b: FileNode) -> Bool {
+        (categorize(node: a).rawValue, b.size) < (categorize(node: b).rawValue, a.size)
+    }
+
+    public var title: String {
+        switch self {
+        case .developerCode: "Developer / Code"
+        case .executablesBinaries: "Executables & Binaries"
+        case .media: "Media (Images/Video)"
+        case .documentsData: "Documents & Data"
+        case .archivesPackages: "Archives & Packages"
+        case .audioSound: "Audio & Sound"
+        case .systemCachesLogs: "System Caches & Logs"
+        case .unclassifiedFolders: "Unclassified / Folders"
+        }
+    }
+
+    public var color: Color {
+        switch self {
+        case .developerCode:
+            return Color.dynamic(dark: (0.176, 0.831, 0.749), light: (0.051, 0.580, 0.533)) // #2DD4BF / #0D9488
+        case .executablesBinaries:
+            return Color.dynamic(dark: (0.925, 0.282, 0.596), light: (0.859, 0.153, 0.467)) // #EC4899 / #DB2777
+        case .media:
+            return Color.dynamic(dark: (0.957, 0.247, 0.369), light: (0.882, 0.114, 0.282)) // #F43F5E / #E11D48
+        case .documentsData:
+            return Color.dynamic(dark: (0.980, 0.800, 0.082), light: (0.851, 0.467, 0.024)) // #FACC15 / #D97706
+        case .archivesPackages:
+            return Color.dynamic(dark: (0.659, 0.333, 0.969), light: (0.576, 0.200, 0.918)) // #A855F7 / #9333EA
+        case .audioSound:
+            return Color.dynamic(dark: (0.984, 0.573, 0.235), light: (0.918, 0.345, 0.047)) // #FB923C / #EA580C
+        case .systemCachesLogs:
+            return Color.dynamic(dark: (0.392, 0.455, 0.545), light: (0.278, 0.333, 0.412)) // #64748B / #475569
+        case .unclassifiedFolders:
+            return Color.dynamic(dark: (0.220, 0.741, 0.969), light: (0.008, 0.518, 0.780)) // #38BDF8 / #0284C7
+        }
+    }
+
+    public static func categorize(node: FileNode) -> FileTypeCategory {
+        if NodeCategory.categorize(node.url) == .cache { return .systemCachesLogs }
+
+        let name = node.name.lowercased()
+        if devNames.contains(name) { return .developerCode }
+        if systemNames.contains(name) { return .systemCachesLogs }
+
+        let ext = node.url.pathExtension.lowercased()
+        if !ext.isEmpty, let cat = extensionMap[ext] {
+            return cat
+        }
+
+        // Small extensionless files (< 1MB) -> system/logs/cache muted tone
+        if !node.isDirectory && ext.isEmpty && node.size < 1_048_576 {
+            return .systemCachesLogs
+        }
+
+        return .unclassifiedFolders
+    }
+
+    private static let devNames: Set<String> = [
+        ".git", "node_modules", "vendor", ".build", ".swiftpm", "xcodeproj", "xcworkspace", ".deps"
+    ]
+    private static let systemNames: Set<String> = [
+        ".cache", ".trash", "caches", "logs", "tmp"
+    ]
+
+    private static let extensionMap: [String: FileTypeCategory] = [
+        "swift": .developerCode, "js": .developerCode, "ts": .developerCode, "py": .developerCode,
+        "cpp": .developerCode, "c": .developerCode, "h": .developerCode, "hpp": .developerCode,
+        "json": .developerCode, "git": .developerCode, "go": .developerCode, "rs": .developerCode,
+        "java": .developerCode, "rb": .developerCode, "sh": .developerCode, "bash": .developerCode,
+        "zsh": .developerCode, "yaml": .developerCode, "yml": .developerCode, "toml": .developerCode,
+        "xml": .developerCode, "sql": .developerCode, "plist": .developerCode, "strings": .developerCode,
+        "xcconfig": .developerCode, "entitlements": .developerCode,
+
+        "app": .executablesBinaries, "dylib": .executablesBinaries, "bin": .executablesBinaries,
+        "exec": .executablesBinaries, "framework": .executablesBinaries, "kext": .executablesBinaries,
+        "bundle": .executablesBinaries, "so": .executablesBinaries, "o": .executablesBinaries,
+        "a": .executablesBinaries, "dsym": .executablesBinaries,
+
+        "jpg": .media, "jpeg": .media, "png": .media, "heic": .media, "heif": .media,
+        "svg": .media, "gif": .media, "webp": .media, "bmp": .media, "tiff": .media,
+        "tif": .media, "mp4": .media, "mov": .media, "m4v": .media, "mkv": .media,
+        "avi": .media, "wmv": .media, "flv": .media, "webm": .media, "mpg": .media, "mpeg": .media,
+
+        "pdf": .documentsData, "pages": .documentsData, "docx": .documentsData, "doc": .documentsData,
+        "txt": .documentsData, "rtf": .documentsData, "xlsx": .documentsData, "xls": .documentsData,
+        "pptx": .documentsData, "ppt": .documentsData, "key": .documentsData, "numbers": .documentsData,
+        "md": .documentsData, "csv": .documentsData, "tsv": .documentsData,
+
+        "zip": .archivesPackages, "tar": .archivesPackages, "gz": .archivesPackages, "gzip": .archivesPackages,
+        "dmg": .archivesPackages, "iso": .archivesPackages, "7z": .archivesPackages, "rar": .archivesPackages,
+        "bz2": .archivesPackages, "xz": .archivesPackages, "zst": .archivesPackages, "pkg": .archivesPackages,
+
+        "mp3": .audioSound, "wav": .audioSound, "flac": .audioSound, "aac": .audioSound,
+        "m4a": .audioSound, "ogg": .audioSound, "wma": .audioSound, "aiff": .audioSound, "alac": .audioSound,
+
+        "cache": .systemCachesLogs, "log": .systemCachesLogs, "tmp": .systemCachesLogs,
+        "sqlite": .systemCachesLogs, "db": .systemCachesLogs
+    ]
 }

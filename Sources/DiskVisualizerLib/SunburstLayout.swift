@@ -16,9 +16,9 @@ enum SunburstLayout {
 
     /// Build the list of segments for `root`.
     /// Depth 0 is the root; children live at depth >= 1.
-    static func segments(root: FileNode) -> [SunburstSegment] {
+    static func segments(root: FileNode, scheme: ColorSchemeMode = .named) -> [SunburstSegment] {
         var segments: [SunburstSegment] = []
-        addSegments(node: root, depth: 0, start: 0, end: .pi * 2, segments: &segments)
+        addSegments(node: root, depth: 0, start: 0, end: .pi * 2, scheme: scheme, segments: &segments)
         return segments
     }
 
@@ -27,10 +27,15 @@ enum SunburstLayout {
         depth: Int,
         start: Double,
         end: Double,
+        scheme: ColorSchemeMode,
         segments: inout [SunburstSegment]
     ) {
-        let children = node.children
+        var children = node.children
         guard !children.isEmpty else { return }
+
+        if scheme == .fileType {
+            children.sort(by: FileTypeCategory.isOrderedBefore)
+        }
 
         let total = max(children.reduce(0) { $0 + $1.size }, 1)
         var current = start
@@ -52,6 +57,7 @@ enum SunburstLayout {
                     depth: depth + 1,
                     start: current,
                     end: current + slice,
+                    scheme: scheme,
                     segments: &segments
                 )
             }

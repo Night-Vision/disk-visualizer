@@ -93,4 +93,27 @@ final class DiskVisualizerTests: XCTestCase {
 
         ScanCache.invalidate(for: url)
     }
+
+    func testFileTypeCategorization() {
+        let store = NodeStore()
+        let root = FileNode(url: URL(fileURLWithPath: "/tmp/project"), isDirectory: true, store: store)
+
+        let codeNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/main.swift"), isDirectory: false, parent: root, store: store)
+        let binaryNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/App.app"), isDirectory: false, parent: root, store: store)
+        let mediaNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/image.png"), isDirectory: false, parent: root, store: store)
+        let docNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/notes.pdf"), isDirectory: false, parent: root, store: store)
+        let archiveNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/archive.zip"), isDirectory: false, parent: root, store: store)
+        let audioNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/song.mp3"), isDirectory: false, parent: root, store: store)
+        let systemNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/db.sqlite"), isDirectory: false, parent: root, store: store)
+        let folderNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/Subfolder"), isDirectory: true, parent: root, store: store)
+
+        XCTAssertEqual(FileTypeCategory.categorize(node: codeNode), .developerCode)
+        XCTAssertEqual(FileTypeCategory.categorize(node: binaryNode), .executablesBinaries)
+        XCTAssertEqual(FileTypeCategory.categorize(node: mediaNode), .media)
+        XCTAssertEqual(FileTypeCategory.categorize(node: docNode), .documentsData)
+        XCTAssertEqual(FileTypeCategory.categorize(node: archiveNode), .archivesPackages)
+        XCTAssertEqual(FileTypeCategory.categorize(node: audioNode), .audioSound)
+        XCTAssertEqual(FileTypeCategory.categorize(node: systemNode), .systemCachesLogs)
+        XCTAssertEqual(FileTypeCategory.categorize(node: folderNode), .unclassifiedFolders)
+    }
 }

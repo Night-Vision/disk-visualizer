@@ -10,3 +10,7 @@
 scripts/
 docs/
 CLAUDE.md
+.agents/
+.agent/
+.claude/
+.gemini/

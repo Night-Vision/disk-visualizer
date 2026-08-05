@@ -258,7 +258,7 @@ private struct SunburstCanvas: View {
     }
 
     private func rebuildSegments() {
-        segments = SunburstLayout.segments(root: root)
+        segments = SunburstLayout.segments(root: root, scheme: colorScheme)
         // Appending in flat-array order preserves each ring's angle sort.
         var byDepth = Array(repeating: [SunburstSegment](), count: SunburstLayout.maxDepth + 1)
         for segment in segments { byDepth[segment.depth].append(segment) }

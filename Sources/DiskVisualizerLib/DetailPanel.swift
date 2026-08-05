@@ -12,6 +12,11 @@ struct DetailPanel: View {
         selected ?? root
     }
 
+    private var displayedChildren: [FileNode] {
+        let children = root.children
+        return colorScheme == .fileType ? children.sorted(by: FileTypeCategory.isOrderedBefore) : children
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -31,7 +36,7 @@ struct DetailPanel: View {
 
             Divider()
 
-            List(root.children) { child in
+            List(displayedChildren) { child in
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.paletteColor(for: child, root: root, scheme: colorScheme))
