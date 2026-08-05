@@ -11,8 +11,6 @@ Packaging/AppIcon.iconset/
 .DS_Store
 
 # AI Agent & Dev Infrastructure
-scripts/
-docs/
 CLAUDE.md
 .agents/
 .agent/
