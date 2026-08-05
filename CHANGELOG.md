@@ -10,6 +10,14 @@
   - Lowered the `Canvas` display-scale cap from 4× to 2.5× to keep memory usage safe while the new animation runs.
 
 ### 🎨 Visual
+- **High-contrast dual-mode File Type palette & anti-mass-gray classification**
+  - Grouped file extensions into 8 distinct functional categories: *Developer / Code*, *Executables & Binaries*, *Media*, *Documents & Data*, *Archives & Packages*, *Audio & Sound*, *System Caches & Logs*, and *Unclassified / Folders*.
+  - Dual-mode dynamic colors powered by `NSColor` adapt automatically to macOS System Dark Mode vs. Light Mode.
+  - Special name classification maps extensionless developer/system items (`.git`, `node_modules`, `.cache`, `.trash`, etc.) to their respective categories.
+  - Sub-files and folders inherit their parent's category color with a depth lightness boost (`adjustLightness(by: depth * 0.08)`), preventing flat mass-gray slices.
+  - Tiny extensionless files (< 1 MB) route to *System Caches & Logs* (muted Slate tone).
+  - Category-based sorting in `SunburstLayout` and `DetailPanel` aligns wedges into contiguous visual color arcs.
+
 - **Single-click select, double-click drill-down on the sunburst**
   - A single click on any wedge now selects it and updates the detail panel.
   - A double-click drills into that folder, zooming the sunburst into its children.
