@@ -35,6 +35,7 @@ public struct ContentView: View {
             detailView
                 .environment(\.colorSchemeMode, colorSchemeMode)
         }
+        .frame(minWidth: 940, minHeight: 650)
     }
 
     // MARK: - Sidebar

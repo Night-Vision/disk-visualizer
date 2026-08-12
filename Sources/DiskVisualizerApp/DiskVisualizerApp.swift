@@ -7,7 +7,7 @@ struct DiskVisualizerApp: App {
         WindowGroup {
             ContentView()
         }
+        .defaultSize(width: 1000, height: 720)
         .defaultPosition(.center)
-        .windowResizability(.contentSize)
     }
 }
