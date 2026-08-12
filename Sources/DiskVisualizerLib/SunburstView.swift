@@ -65,7 +65,6 @@ private struct SunburstCanvas: View {
     @State private var scrollMonitor = ScrollMonitor()
     @State private var rightClickMonitor = RightClickMonitor()
     @State private var canvasFrame: CGRect = .zero
-    @State private var isHovering = false
     /// 0 → 1 during a double-click drill-down. Used to scale the sunburst
     /// from 90 % to 100 % inside the Canvas, replacing the previous heavy
     /// SwiftUI view transition.
@@ -216,14 +215,12 @@ private struct SunburstCanvas: View {
         .onContinuousHover { phase in
             switch phase {
             case .active(let location):
-                isHovering = true
                 let hit = hitTest(point: location, size: geometry.size)
                 if let previous = hoveredNode, let new = hit, previous != new {
                     lastTappedNode = nil
                 }
                 hoveredNode = hit
             case .ended:
-                isHovering = false
                 hoveredNode = nil
             }
         }

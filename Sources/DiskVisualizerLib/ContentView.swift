@@ -453,9 +453,6 @@ struct SelectedDetailsCard: View {
                     Text("Selected Details")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Image(systemName: node.iconName)
-                        .imageScale(.small)
-                        .foregroundStyle(.tint)
                 }
                 .contentShape(Rectangle())
             }

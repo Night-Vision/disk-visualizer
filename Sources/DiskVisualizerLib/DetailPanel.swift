@@ -13,7 +13,7 @@ struct DetailPanel: View {
     }
 
     private var displayedChildren: [FileNode] {
-        let children = root.children
+        let children = displayed.children
         return colorScheme == .fileType ? children.sorted(by: FileTypeCategory.isOrderedBefore) : children
     }
 
