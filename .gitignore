@@ -16,4 +16,7 @@ CLAUDE.md
 .agent/
 .claude/
 .gemini/
+.remember/
+.reasonix/
+reasonix.toml
 docs/superpowers/
