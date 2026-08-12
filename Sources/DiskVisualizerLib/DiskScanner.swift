@@ -576,7 +576,11 @@ public final class DiskScanner {
 
     static var hasFullDiskAccess: Bool {
         let testPath = "/Library/Preferences/com.apple.TimeMachine.plist"
-        return FileManager.default.isReadableFile(atPath: testPath)
+        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: testPath)) else {
+            return false
+        }
+        try? handle.close()
+        return true
     }
 }
 

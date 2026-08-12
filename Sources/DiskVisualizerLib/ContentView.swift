@@ -159,6 +159,11 @@ public struct ContentView: View {
                     .font(.caption)
             }
             Spacer()
+            Button("Check Again") {
+                hasFullDiskAccess = DiskScanner.hasFullDiskAccess
+            }
+            .controlSize(.small)
+
             Button("Open Privacy Settings") {
                 openPrivacySettings()
             }
