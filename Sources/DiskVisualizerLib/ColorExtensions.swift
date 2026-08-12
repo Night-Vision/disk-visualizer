@@ -61,18 +61,6 @@ extension Color {
         "Desktop":   Color(red: 0.506, green: 0.549, blue: 0.973),  // #818CF8 Periwinkle
     ]
 
-    // MARK: - File-type color constants
-
-    private static let fuchsiaPurple = Color(red: 0.753, green: 0.518, blue: 0.988) // #C084FC
-    private static let warmAmber     = Color(red: 0.984, green: 0.584, blue: 0.235) // #FB923C
-    private static let indigoBlue    = Color(red: 0.388, green: 0.400, blue: 0.945) // #6366F1
-    private static let emeraldGreen  = Color(red: 0.063, green: 0.725, blue: 0.506) // #10B981
-    private static let cyan          = Color(red: 0.024, green: 0.714, blue: 0.831) // #06B6D4
-    private static let roseRed       = Color(red: 0.957, green: 0.247, blue: 0.369) // #F43F5E
-    private static let slateGray       = Color(red: 0.278, green: 0.333, blue: 0.412) // #475569 Dark Slate
-    private static let mutedCharcoal   = Color(red: 0.294, green: 0.333, blue: 0.388) // #4B5563
-    private static let unknownFileGray = Color(red: 0.612, green: 0.639, blue: 0.686) // #9CA3AF Neutral Gray
-
     // MARK: - Fallback / misc constants
 
     /// Cool Slate (#94A3B8) — for aggregated nodes.
@@ -123,35 +111,6 @@ extension Color {
         if name == "[other folders]" || name == "[deeper items]" { return true }
         return name.hasPrefix("[") && name.hasSuffix(" smaller files]")
     }
-
-    // MARK: - File-type extension sets
-
-    private static let videoExtensions: Set<String> = [
-        "mp4", "mov", "m4v", "mkv", "avi", "wmv", "flv", "webm", "mpg", "mpeg"
-    ]
-    private static let imageExtensions: Set<String> = [
-        "jpg", "jpeg", "png", "heic", "heif", "svg", "gif", "webp", "bmp", "tiff", "tif"
-    ]
-    private static let documentExtensions: Set<String> = [
-        "pdf", "pages", "docx", "doc", "txt", "rtf", "xlsx", "xls", "pptx", "ppt",
-        "key", "numbers", "md", "csv", "tsv"
-    ]
-    private static let codeExtensions: Set<String> = [
-        "swift", "py", "cpp", "c", "h", "hpp", "json", "db", "js", "ts", "go",
-        "rs", "java", "rb", "sh", "bash", "zsh", "yaml", "yml", "toml", "xml",
-        "sqlite", "sql", "plist", "strings", "xcconfig", "entitlements"
-    ]
-    private static let audioExtensions: Set<String> = [
-        "mp3", "wav", "flac", "aac", "m4a", "ogg", "wma", "aiff", "alac"
-    ]
-    private static let archiveExtensions: Set<String> = [
-        "zip", "tar", "gz", "gzip", "dmg", "iso", "7z", "rar", "bz2", "xz",
-        "zst", "pkg"
-    ]
-    private static let binaryExtensions: Set<String> = [
-        "app", "dylib", "bin", "exec", "framework", "kext", "bundle", "so",
-        "o", "a", "dSYM"
-    ]
 
     // MARK: - Ancestor-chain color lookup (named scheme)
 
