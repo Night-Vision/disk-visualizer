@@ -36,6 +36,13 @@ public struct ContentView: View {
                 .environment(\.colorSchemeMode, colorSchemeMode)
         }
         .frame(minWidth: 940, minHeight: 650)
+        .onAppear {
+            DispatchQueue.main.async {
+                if let window = NSApp.windows.first(where: { $0.isKeyWindow || $0.isVisible }) {
+                    window.setContentSize(NSSize(width: 940, height: 650))
+                }
+            }
+        }
     }
 
     // MARK: - Sidebar
