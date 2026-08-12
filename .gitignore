@@ -19,4 +19,6 @@ CLAUDE.md
 .remember/
 .reasonix/
 reasonix.toml
+.skill staging/
+.skill-staging/
 docs/superpowers/
