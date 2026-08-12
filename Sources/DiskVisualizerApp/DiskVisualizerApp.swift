@@ -9,6 +9,5 @@ struct DiskVisualizerApp: App {
         }
         .defaultSize(width: 940, height: 650)
         .defaultPosition(.center)
-        .windowResizability(.contentMinSize)
     }
 }
