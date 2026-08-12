@@ -19,25 +19,35 @@ public enum ScanCache {
         return cacheDirectory.appendingPathComponent("\(key).json")
     }
 
-    /// Serialize the flat node array to JSON on disk.
+    private struct CacheEnvelope: Codable {
+        static let currentVersion = 1
+        let version: Int
+        let nodes: [CompactNode]
+    }
+
+    /// Serialize the flat node array wrapped in a versioned envelope to JSON on disk.
     public static func save(store: NodeStore, for url: URL) throws {
         // Skip JSON caching for massive trees (> 50,000 nodes).
         guard store.count <= 50_000 else { return }
-        let data = try JSONEncoder().encode(store.nodes)
+        let envelope = CacheEnvelope(version: CacheEnvelope.currentVersion, nodes: store.nodes)
+        let data = try JSONEncoder().encode(envelope)
         try data.write(to: cacheURL(for: url))
     }
 
     /// Deserialize a flat node array from disk and wrap it in a fresh
-    /// `NodeStore`. Returns `nil` when no valid cache exists.
+    /// `NodeStore`. Returns `nil` when no valid cache exists or schema version mismatches.
     public static func load(for url: URL) -> NodeStore? {
         let fileURL = cacheURL(for: url)
         guard FileManager.default.fileExists(atPath: fileURL.path),
               let data = try? Data(contentsOf: fileURL) else {
             return nil
         }
-        guard let nodes = try? JSONDecoder().decode([CompactNode].self, from: data) else { return nil }
+        guard let envelope = try? JSONDecoder().decode(CacheEnvelope.self, from: data),
+              envelope.version == CacheEnvelope.currentVersion else {
+            return nil
+        }
         let store = NodeStore()
-        store.nodes = nodes
+        store.nodes = envelope.nodes
         return store
     }
 

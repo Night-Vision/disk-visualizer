@@ -1,8 +1,9 @@
-import XCTest
+import Foundation
+import Testing
 @testable import DiskVisualizerLib
 
-final class DiskVisualizerTests: XCTestCase {
-    func testSunburstSegments() {
+@Suite struct DiskVisualizerTests {
+    @Test func sunburstSegments() {
         let store = NodeStore()
         var root = FileNode(url: URL(fileURLWithPath: "/tmp"), isDirectory: true, store: store)
         var a = FileNode(url: URL(fileURLWithPath: "/tmp/a"), isDirectory: false, parent: root, store: store)
@@ -14,19 +15,19 @@ final class DiskVisualizerTests: XCTestCase {
 
         // Size-descending order is enforced at the store write boundary:
         // b (300) must come before a (100) despite insertion order.
-        XCTAssertEqual(store.nodes[0].childIndices[0], b.index)
+        #expect(store.nodes[0].childIndices[0] == b.index)
 
         let segments = SunburstLayout.segments(root: root)
 
         // Two child segments, each taking its proportional slice.
-        XCTAssertEqual(segments.count, 2)
+        #expect(segments.count == 2)
         let first = segments.first { $0.node == a }!
         let second = segments.first { $0.node == b }!
-        XCTAssertEqual(first.endAngle - first.startAngle, .pi / 2, accuracy: 0.001)
-        XCTAssertEqual(second.endAngle - second.startAngle, .pi * 1.5, accuracy: 0.001)
+        #expect(abs((first.endAngle - first.startAngle) - .pi / 2) < 0.001)
+        #expect(abs((second.endAngle - second.startAngle) - .pi * 1.5) < 0.001)
     }
 
-    func testRemoveFromTreeReSortsAncestors() {
+    @Test func removeFromTreeReSortsAncestors() {
         let store = NodeStore()
         var root = FileNode(url: URL(fileURLWithPath: "/tmp/r"), isDirectory: true, store: store)
         var a = FileNode(url: URL(fileURLWithPath: "/tmp/r/a"), isDirectory: true, parent: root, store: store)
@@ -48,31 +49,31 @@ final class DiskVisualizerTests: XCTestCase {
         c.removeFromTree()
 
         // C zeroed and removed from B; sizes subtracted up the chain.
-        XCTAssertEqual(store.nodes[c.index].size, 0)
-        XCTAssertEqual(store.nodes[b.index].childIndices, [])
-        XCTAssertEqual(store.nodes[b.index].size, 20)
-        XCTAssertEqual(store.nodes[a.index].size, 60)
-        XCTAssertEqual(store.nodes[root.index].size, 130)
+        #expect(store.nodes[c.index].size == 0)
+        #expect(store.nodes[b.index].childIndices == [])
+        #expect(store.nodes[b.index].size == 20)
+        #expect(store.nodes[a.index].size == 60)
+        #expect(store.nodes[root.index].size == 130)
         // Multi-level re-sort: E(40) before B(20), D(70) before A(60).
-        XCTAssertEqual(store.nodes[a.index].childIndices, [e.index, b.index])
-        XCTAssertEqual(store.nodes[root.index].childIndices, [d.index, a.index])
+        #expect(store.nodes[a.index].childIndices == [e.index, b.index])
+        #expect(store.nodes[root.index].childIndices == [d.index, a.index])
         // Idempotent: trashing the (now-zeroed) node again is a no-op.
         c.removeFromTree()
-        XCTAssertEqual(store.nodes[root.index].size, 130)
+        #expect(store.nodes[root.index].size == 130)
     }
 
-    func testInodeTrackerMarksFirstOnly() async {
+    @Test func inodeTrackerMarksFirstOnly() async {
         let tracker = InodeTracker()
         let first = tracker.mark(file: NSNumber(value: 123), volume: NSNumber(value: 1))
         let second = tracker.mark(file: NSNumber(value: 123), volume: NSNumber(value: 1))
         let different = tracker.mark(file: NSNumber(value: 124), volume: NSNumber(value: 1))
 
-        XCTAssertTrue(first)
-        XCTAssertFalse(second)
-        XCTAssertTrue(different)
+        #expect(first)
+        #expect(!second)
+        #expect(different)
     }
 
-    func testScanCacheRoundTrip() throws {
+    @Test func scanCacheRoundTrip() throws {
         let store = NodeStore()
         var root = FileNode(url: URL(fileURLWithPath: "/tmp/cache"), isDirectory: true, store: store)
         var child = FileNode(url: URL(fileURLWithPath: "/tmp/cache/child.txt"), isDirectory: false, parent: root, store: store)
@@ -86,34 +87,62 @@ final class DiskVisualizerTests: XCTestCase {
         try ScanCache.save(store: store, for: url)
         let loadedStore = ScanCache.load(for: url)
 
-        XCTAssertNotNil(loadedStore)
-        XCTAssertEqual(loadedStore?.nodes[0].size, 42)
-        XCTAssertEqual(loadedStore?.nodes[0].childIndices.count, 1)
-        XCTAssertEqual(loadedStore?.nodes[1].size, 42)
+        #expect(loadedStore != nil)
+        #expect(loadedStore?.nodes[0].size == 42)
+        #expect(loadedStore?.nodes[0].childIndices.count == 1)
+        #expect(loadedStore?.nodes[1].size == 42)
 
         ScanCache.invalidate(for: url)
     }
 
-    func testFileTypeCategorization() {
+    @Test func scanCacheVersionMismatch() throws {
+        let url = URL(fileURLWithPath: "/tmp/cache-mismatch-test")
+        ScanCache.invalidate(for: url)
+
+        // Write mismatched version JSON directly to cache path
+        let key = url.path
+            .data(using: .utf8)!
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "-")
+        let cacheDir = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first!
+            .appendingPathComponent("DiskVisualizer", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let cacheURL = cacheDir.appendingPathComponent("\(key).json")
+
+        let invalidPayload = """
+        {"version": 999, "nodes": []}
+        """.data(using: .utf8)!
+        try invalidPayload.write(to: cacheURL)
+
+        let loadedStore = ScanCache.load(for: url)
+        #expect(loadedStore == nil)
+
+        ScanCache.invalidate(for: url)
+    }
+
+    @Test func fileTypeCategorization() {
         let store = NodeStore()
-        let root = FileNode(url: URL(fileURLWithPath: "/tmp/project"), isDirectory: true, store: store)
+        let root = FileNode(url: URL(fileURLWithPath: "/Users/test/project"), isDirectory: true, store: store)
 
-        let codeNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/main.swift"), isDirectory: false, parent: root, store: store)
-        let binaryNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/App.app"), isDirectory: false, parent: root, store: store)
-        let mediaNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/image.png"), isDirectory: false, parent: root, store: store)
-        let docNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/notes.pdf"), isDirectory: false, parent: root, store: store)
-        let archiveNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/archive.zip"), isDirectory: false, parent: root, store: store)
-        let audioNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/song.mp3"), isDirectory: false, parent: root, store: store)
-        let systemNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/db.sqlite"), isDirectory: false, parent: root, store: store)
-        let folderNode = FileNode(url: URL(fileURLWithPath: "/tmp/project/Subfolder"), isDirectory: true, parent: root, store: store)
+        let codeNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/main.swift"), isDirectory: false, parent: root, store: store)
+        let binaryNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/App.app"), isDirectory: false, parent: root, store: store)
+        let mediaNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/image.png"), isDirectory: false, parent: root, store: store)
+        let docNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/notes.pdf"), isDirectory: false, parent: root, store: store)
+        let archiveNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/archive.zip"), isDirectory: false, parent: root, store: store)
+        let audioNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/song.mp3"), isDirectory: false, parent: root, store: store)
+        let systemNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/db.sqlite"), isDirectory: false, parent: root, store: store)
+        let folderNode = FileNode(url: URL(fileURLWithPath: "/Users/test/project/Subfolder"), isDirectory: true, parent: root, store: store)
 
-        XCTAssertEqual(FileTypeCategory.categorize(node: codeNode), .developerCode)
-        XCTAssertEqual(FileTypeCategory.categorize(node: binaryNode), .executablesBinaries)
-        XCTAssertEqual(FileTypeCategory.categorize(node: mediaNode), .media)
-        XCTAssertEqual(FileTypeCategory.categorize(node: docNode), .documentsData)
-        XCTAssertEqual(FileTypeCategory.categorize(node: archiveNode), .archivesPackages)
-        XCTAssertEqual(FileTypeCategory.categorize(node: audioNode), .audioSound)
-        XCTAssertEqual(FileTypeCategory.categorize(node: systemNode), .systemCachesLogs)
-        XCTAssertEqual(FileTypeCategory.categorize(node: folderNode), .unclassifiedFolders)
+        #expect(FileTypeCategory.categorize(node: codeNode) == .developerCode)
+        #expect(FileTypeCategory.categorize(node: binaryNode) == .executablesBinaries)
+        #expect(FileTypeCategory.categorize(node: mediaNode) == .media)
+        #expect(FileTypeCategory.categorize(node: docNode) == .documentsData)
+        #expect(FileTypeCategory.categorize(node: archiveNode) == .archivesPackages)
+        #expect(FileTypeCategory.categorize(node: audioNode) == .audioSound)
+        #expect(FileTypeCategory.categorize(node: systemNode) == .systemCachesLogs)
+        #expect(FileTypeCategory.categorize(node: folderNode) == .unclassifiedFolders)
     }
 }
