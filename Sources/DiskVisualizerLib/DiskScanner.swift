@@ -87,7 +87,7 @@ public final class DiskScanner {
             }
 
             do {
-                let root = FileNode(url: url, isDirectory: true, store: store)
+                var root = FileNode(url: url, isDirectory: true, store: store)
                 rootIndex = root.index
 
                 let tracker = InodeTracker()
@@ -110,6 +110,7 @@ public final class DiskScanner {
                     progress: progress
                 )
                 await progress.flush()
+                Self.appendSiblingVolumes(to: &root, scannedURL: url)
 
                 let hasErrors = await permissionCounter.hasErrors
                 let needsFDA = !hasFDA && hasErrors
@@ -168,7 +169,10 @@ public final class DiskScanner {
 
     private static let skipRootPaths: Set<String> = [
         "/Volumes",
-        "/System/Volumes",
+        // Not "/System/Volumes": that would hide Preboot/Recovery/VM/Update.
+        // Only the Data volume must go — it is the same 152 GB already reached
+        // through the root firmlinks (/Users, /Applications, /private, …).
+        "/System/Volumes/Data",
         "/home",
         "/net",
         "/Network"
@@ -252,19 +256,30 @@ public final class DiskScanner {
             if isSymbolicLink { continue }
             if Self.shouldSkip(url) { continue }
 
-            if isDir && !isPackage {
+            let modificationDate = resourceValues?.contentModificationDate
+
+            if isDir {
                 if Self.skipDirectoryNames.contains(url.lastPathComponent) { continue }
 
-                if Self.shouldShallowScan(url: url) {
+                // Packages (.app, .framework, .bundle, …) and the shallow-scan
+                // roots collapse to one leaf node carrying a real recursive
+                // byte sum. Before this, a package fell through to the file
+                // branch below and was sized as its own directory inode — which
+                // is ~0 bytes, so /Applications reported 61 KB for 19 GB.
+                if isPackage || Self.shouldShallowScan(url: url) {
                     let size = try await aggregateDeepSize(
                         subdirs: [url],
                         hasFDA: hasFDA,
+                        tracker: tracker,
                         permissionCounter: permissionCounter,
                         progress: progress
                     )
                     if size > 0 {
-                        var child = FileNode(url: url, isDirectory: true, parent: node, store: node.store)
+                        // A package reads as a leaf: one selectable, trashable
+                        // unit rather than an empty folder.
+                        var child = FileNode(url: url, isDirectory: !isPackage, parent: node, store: node.store)
                         child.size = size
+                        child.modificationDate = modificationDate
                         directChildren.append(child)
                     }
                 } else {
@@ -273,7 +288,6 @@ public final class DiskScanner {
             } else {
                 let fileSize = Int64(resourceValues?.fileAllocatedSize ?? resourceValues?.fileSize ?? 0)
                 let linkCount = resourceValues?.linkCount ?? 1
-                let modificationDate = resourceValues?.contentModificationDate
 
                 var effectiveSize = fileSize
                 if linkCount > 1 {
@@ -323,6 +337,7 @@ public final class DiskScanner {
             let aggregatedSize = try await aggregateDeepSize(
                 subdirs: subdirs,
                 hasFDA: hasFDA,
+                tracker: tracker,
                 permissionCounter: permissionCounter,
                 progress: progress
             )
@@ -381,6 +396,7 @@ public final class DiskScanner {
     private static func aggregateDeepSize(
         subdirs: [URL],
         hasFDA: Bool,
+        tracker: InodeTracker,
         permissionCounter: PermissionErrorCounter,
         progress: ScanProgress
     ) async throws -> Int64 {
@@ -396,6 +412,7 @@ public final class DiskScanner {
                         try await Self.aggregateOneSubdir(
                             dirURL: dirURL,
                             hasFDA: hasFDA,
+                            tracker: tracker,
                             permissionCounter: permissionCounter,
                             progress: progress
                         )
@@ -417,6 +434,7 @@ public final class DiskScanner {
     private static func aggregateOneSubdir(
         dirURL: URL,
         hasFDA: Bool,
+        tracker: InodeTracker,
         permissionCounter: PermissionErrorCounter,
         progress: ScanProgress
     ) async throws -> Int64 {
@@ -425,7 +443,7 @@ public final class DiskScanner {
         let enumerator = FileManager.default.enumerator(
             at: dirURL,
             includingPropertiesForKeys: resourceKeys,
-            options: [.skipsPackageDescendants],
+            options: [],
             errorHandler: { _, error in
                 if Self.isPermissionError(error) {
                     Task { await permissionCounter.increment() }
@@ -443,12 +461,27 @@ public final class DiskScanner {
             let values = try? url.resourceValues(forKeys: Self.resourceKeysSet)
             let isSymbolicLink = values?.isSymbolicLink ?? false
             let isDir = values?.isDirectory ?? false
-            let isPackage = (values?.isPackage ?? false) || Self.isPackageURL(url)
             if isSymbolicLink { continue }
-            if isDir && !isPackage { continue }
+            if isDir {
+                // Prune, don't just ignore. This is a deep enumerator, so
+                // without `skipDescendants` a shallow scan of /System walks
+                // every directory of /System/Volumes/Data — the whole Data
+                // volume — only for the file filter below to discard it all.
+                if Self.shouldSkip(url) { enumerator?.skipDescendants() }
+                continue
+            }
             if Self.shouldSkip(url) { continue }
 
-            let size = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+            var size = Int64(values?.fileAllocatedSize ?? values?.fileSize ?? 0)
+            // Same hard-link dedupe as the node-building walk: without it this
+            // path double-counts every multi-link inode it sums.
+            if (values?.linkCount ?? 1) > 1 {
+                let isFirst = tracker.mark(
+                    file: values?.fileResourceIdentifier,
+                    volume: values?.volumeIdentifier
+                )
+                if !isFirst { size = 0 }
+            }
             total += size
             localBytes += size
             localItems += 1
@@ -524,18 +557,63 @@ public final class DiskScanner {
         return results
     }
 
+    // MARK: - Sibling APFS volumes
+
+    /// Add the volumes that share this one's APFS container but can't be
+    /// reached by walking it — Preboot, Recovery, VM, Update. Without them the
+    /// root total silently misses ~13 GB of what the drive reports as used.
+    /// Sized rows only; see `APFSVolumes.siblings(of:)` for why they aren't walked.
+    private static func appendSiblingVolumes(to root: inout FileNode, scannedURL url: URL) {
+        // Only meaningful for a whole-volume scan, not "Scan Folder…".
+        guard let volume = try? url.resourceValues(forKeys: [.volumeURLKey]).volume,
+              volume.path == url.path else { return }
+
+        let siblings = APFSVolumes.siblings(of: url)
+        guard !siblings.isEmpty else { return }
+
+        var children = root.children
+        for sibling in siblings {
+            var child = FileNode(
+                url: URL(fileURLWithPath: "/System/Volumes/\(sibling.name)", isDirectory: true),
+                isDirectory: true,
+                parent: root,
+                store: root.store
+            )
+            child.size = sibling.bytes
+            children.append(child)
+        }
+
+        // `setChildren` re-sorts by size, so no explicit sort here.
+        root.children = children
+        root.size = children.reduce(0) { $0 + $1.size }
+    }
+
     // MARK: - Protected / skip paths
 
+    /// Directories macOS gates behind Full Disk Access. Skipping these without
+    /// FDA avoids a pile of guaranteed-EPERM walks; everything *else* under
+    /// ~/Library reads fine unprivileged and must be walked — a blanket
+    /// "Library/" rule used to live here and silently dropped 76 GB
+    /// (Application Support 28 GB, Containers 16 GB, Caches 7 GB, …).
     private static let protectedHomePaths: [String] = [
+        "Library/Accounts",
+        "Library/Application Support/AddressBook",
+        "Library/Application Support/CallHistoryDB",
+        "Library/Application Support/com.apple.TCC",
         "Library/Calendars",
         "Library/Contacts",
+        "Library/Cookies",
+        "Library/CoreFollowUp",
         "Library/HomeKit",
+        "Library/IdentityServices",
         "Library/Mail",
         "Library/Messages",
+        "Library/Metadata/CoreSpotlight",
         "Library/Photos",
         "Library/Reminders",
         "Library/Safari",
-        "Library/Application Support/AddressBook",
+        "Library/Sharing",
+        "Library/Suggestions",
         "Music",
         "Pictures",
         "Movies"
@@ -545,11 +623,10 @@ public final class DiskScanner {
         FileManager.default.homeDirectoryForCurrentUser.path
     }
 
-    private static func isProtectedDirectory(_ url: URL) -> Bool {
+    static func isProtectedDirectory(_ url: URL) -> Bool {
         let path = url.path
         guard path.hasPrefix(homePath) else { return false }
         let relative = String(path.dropFirst(homePath.count).trimmingCharacters(in: CharacterSet(charactersIn: "/")))
-        if relative.hasPrefix("Library/") { return true }
         return protectedHomePaths.contains(relative) || protectedHomePaths.contains { relative.hasPrefix($0 + "/") }
     }
 

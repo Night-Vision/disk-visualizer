@@ -20,15 +20,26 @@ public enum ScanCache {
     }
 
     private struct CacheEnvelope: Codable {
-        static let currentVersion = 1
+        // Bumped to 2: caches written before packages and ~/Library were
+        // sized correctly hold wrong totals, and `load` rejects them on this
+        // mismatch.
+        static let currentVersion = 2
         let version: Int
         let nodes: [CompactNode]
     }
 
     /// Serialize the flat node array wrapped in a versioned envelope to JSON on disk.
+    ///
+    /// ponytail: JSON, measured — a binary plist of the same 38.8k-node tree is
+    /// smaller on disk (27 MB vs 32 MB) but decodes in 0.94 s against JSON's
+    /// 0.40 s. If the file size ever matters more than the load, drop the
+    /// per-node `url` from the encoded form; it is derivable from
+    /// `parentIndex` + `name`.
     public static func save(store: NodeStore, for url: URL) throws {
-        // Skip JSON caching for massive trees (> 50,000 nodes).
-        guard store.count <= 50_000 else { return }
+        // Skip caching for massive trees. Full coverage of `/` measures 38.8k
+        // nodes on a 178 GB drive — uncomfortably close to the old 50,000 cap,
+        // and going over it silently means a cold walk on every launch.
+        guard store.count <= 250_000 else { return }
         let envelope = CacheEnvelope(version: CacheEnvelope.currentVersion, nodes: store.nodes)
         let data = try JSONEncoder().encode(envelope)
         try data.write(to: cacheURL(for: url))

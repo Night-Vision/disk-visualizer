@@ -146,3 +146,42 @@ import Testing
         #expect(FileTypeCategory.categorize(node: folderNode) == .unclassifiedFolders)
     }
 }
+
+@Suite struct CoverageTests {
+    /// A package must be sized by what it contains. Before the fix it fell
+    /// through to the file branch and reported its directory inode (~0 bytes),
+    /// which is why /Applications showed 61 KB for 19 GB of apps.
+    @Test @MainActor func packageIsSizedByItsContents() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let resources = tmp.appendingPathComponent("Fake.app/Contents/Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try Data(count: 300_000).write(to: resources.appendingPathComponent("big.bin"))
+        defer {
+            ScanCache.invalidate(for: tmp)
+            try? FileManager.default.removeItem(at: tmp)
+        }
+
+        let scanner = DiskScanner()
+        scanner.scan(url: tmp, ignoreCache: true)
+        while scanner.isScanning {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        let app = try #require(scanner.rootNode?.children.first { $0.name == "Fake.app" })
+        #expect(app.size >= 300_000)
+        #expect(scanner.rootNode?.size ?? 0 >= 300_000)
+    }
+
+    /// Only the genuinely TCC-gated paths are pre-skipped. A blanket
+    /// "Library/" rule used to match here and dropped 76 GB of readable data.
+    @Test func onlyTCCPathsArePreSkipped() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        #expect(!DiskScanner.isProtectedDirectory(home.appendingPathComponent("Library/Application Support")))
+        #expect(!DiskScanner.isProtectedDirectory(home.appendingPathComponent("Library/Containers")))
+        #expect(!DiskScanner.isProtectedDirectory(home.appendingPathComponent("Library/Caches")))
+        #expect(DiskScanner.isProtectedDirectory(home.appendingPathComponent("Library/Messages")))
+        #expect(DiskScanner.isProtectedDirectory(home.appendingPathComponent("Library/Mail/V10")))
+        #expect(DiskScanner.isProtectedDirectory(home.appendingPathComponent("Pictures")))
+    }
+}

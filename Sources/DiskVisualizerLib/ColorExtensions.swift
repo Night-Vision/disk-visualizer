@@ -34,6 +34,9 @@ extension Color {
     /// Named root-folder swatches. Every file/folder under one of these paths
     /// inherits that root's hue, with lightness boosted per depth level.
     private static let rootColorMap: [(prefix: String, color: Color)] = [
+        // Must precede "/System": `rootColor(for:)` takes the first prefix hit,
+        // so Preboot/Recovery/VM/Update would otherwise inherit System's purple.
+        ("/System/Volumes", Color(red: 0.278, green: 0.333, blue: 0.412)), // #475569 Dark Charcoal
         ("/Users",        Color(red: 0.220, green: 0.741, blue: 0.969)), // #38BDF8 Sky Blue
         ("/System",       Color(red: 0.659, green: 0.333, blue: 0.969)), // #A855F7 Purple
         ("/Library",      Color(red: 0.961, green: 0.620, blue: 0.039)), // #F59E0B Amber
